@@ -1,0 +1,35 @@
+name: Build APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      - run: flutter --version
+
+      - run: flutter pub get
+
+      - run: flutter build apk --release
+
+      - name: Create Release with APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="build-${{ github.run_number }}"
+          gh release create "$TAG" \
+            "build/app/outputs/flutter-apk/app-release.apk" \
+            --title "Manager Assistant APK build #${{ github.run_number }}" \
+            --notes "Automated release build from commit ${{ github.sha }}"
