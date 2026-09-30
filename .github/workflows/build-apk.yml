@@ -22,9 +22,13 @@ jobs:
 
       - run: flutter pub get
 
-      - run: flutter build apk --release
+      - name: Build APK
+        run: |
+          set -o pipefail
+          flutter build apk --release 2>&1 | tee build_log.txt
 
       - name: Create Release with APK
+        if: success()
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -33,3 +37,15 @@ jobs:
             "build/app/outputs/flutter-apk/app-release.apk" \
             --title "Manager Assistant APK build #${{ github.run_number }}" \
             --notes "Automated release build from commit ${{ github.sha }}"
+
+      - name: Upload build log on failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="debug-${{ github.run_number }}"
+          tail -n 500 build_log.txt > build_log_tail.txt || echo "no log" > build_log_tail.txt
+          gh release create "$TAG" \
+            "build_log_tail.txt" \
+            --title "Build FAILED log #${{ github.run_number }}" \
+            --notes "Automated failure log from commit ${{ github.sha }}"
