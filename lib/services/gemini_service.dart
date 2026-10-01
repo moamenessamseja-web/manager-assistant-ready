@@ -7,7 +7,7 @@ class GeminiService {
 
   // ملاحظة: مفتاح الـ API الحالي مفعّل على Flash-Lite فقط وليس Flash العادي.
   // استخدام أي اسم موديل آخر هنا سيرجع خطأ صلاحيات (403/404) من Google.
-  static const String _model = 'gemini-2.5-flash-lite';
+  static const String _model = 'gemini-3.5-flash-lite';
 
   Future<Map<String, dynamic>> parse(String text) async {
     final today = DateTime.now().toIso8601String().substring(0, 10);
