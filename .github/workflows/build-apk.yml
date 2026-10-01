@@ -26,6 +26,22 @@ jobs:
             flutter create --platforms=android --org com.example --project-name manager_assistant .
           fi
 
+      - name: Inject required Android permissions (mic + notifications)
+        run: |
+          MANIFEST="android/app/src/main/AndroidManifest.xml"
+          if [ -f "$MANIFEST" ]; then
+            for perm in \
+              'android.permission.RECORD_AUDIO' \
+              'android.permission.POST_NOTIFICATIONS' \
+              'android.permission.INTERNET'; do
+              if ! grep -q "$perm" "$MANIFEST"; then
+                sed -i "/<manifest /a\\    <uses-permission android:name=\"$perm\" />" "$MANIFEST"
+              fi
+            done
+            echo "---- AndroidManifest.xml after injection ----"
+            cat "$MANIFEST"
+          fi
+
       - name: Enable core library desugaring (required by flutter_local_notifications)
         run: |
           if [ -f "android/app/build.gradle.kts" ]; then
