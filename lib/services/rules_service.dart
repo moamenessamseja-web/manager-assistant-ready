@@ -2,7 +2,7 @@ import 'package:uuid/uuid.dart';
 import '../models/commitment.dart';
 import '../models/rule.dart';
 import 'storage_service.dart';
-import 'notification_service.dart';
+import 'reminder_service.dart';
 
 /// يفحص القواعد المتكررة (مثل "كل أول الشهر فكرني بالإيجار")
 /// وينشئ منها التزامات (Commitment) جديدة كل ما يحين موعدها،
@@ -45,7 +45,14 @@ class RulesService {
           followUpRule: r.text,
         );
         await StorageService.saveCommitment(c);
-        await NotificationService.scheduleCommitment(c);
+        await ReminderService.createAndSchedule(
+          title: 'قاعدة متكررة',
+          body: r.text,
+          dueAt: r.nextDue,
+          recurrence: r.frequency,
+          relatedEntityId: r.id,
+          relatedEntityType: 'rule',
+        );
         r.nextDue = _advance(r.nextDue, r.frequency, r.anchor);
         triggered++;
       }

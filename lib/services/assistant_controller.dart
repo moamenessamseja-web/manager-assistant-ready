@@ -5,7 +5,17 @@ import '../models/supplier.dart';
 import '../models/rule.dart';
 import 'gemini_service.dart';
 import 'storage_service.dart';
-import 'notification_service.dart';
+import 'reminder_service.dart';
+
+/// نتيجة البحث عن كيان (موظف/مورد) بالاسم — بتميّز صراحة بين:
+/// "لقيت واحد بالظبط" و"لقيت أكتر من واحد (محتاج توضيح)" و"مفيش حد".
+/// الهدف: عدم التخمين أبدًا لو فيه أكتر من تطابق (راجع قسم Entity Resolution).
+class _Resolved<T> {
+  final T? value;
+  final String? message; // موجودة لو فشل الحل (مفيش / أكتر من واحد)
+  const _Resolved(this.value, this.message);
+  bool get ok => value != null;
+}
 
 class AssistantController {
   static Future<String> handle(String text) async {
@@ -31,12 +41,40 @@ class AssistantController {
         return _addSupplierPayment(d);
       case 'add_rule':
         return _addRule(d);
+      case 'query_business_data':
+        return _queryBusinessData(d);
       case 'create_commitment':
         return _createCommitment(d, text);
       default:
         return 'لم أفهم العملية المطلوبة بوضوح. جرب تصيغها بشكل تاني.';
     }
   }
+
+  // ---------------- Entity resolution (لا تخمين عند التباس) ----------------
+
+  static _Resolved<Employee> _resolveEmployee(String name) {
+    if (name.trim().isEmpty) return const _Resolved(null, '❓ محتاج اسم الموظف.');
+    final matches = StorageService.employeesMatching(name);
+    if (matches.isEmpty) return _Resolved(null, '❓ لم أجد موظف باسم $name.');
+    if (matches.length > 1) {
+      final opts = matches.map((e) => '${e.name} (${e.role})').join(' / ');
+      return _Resolved(null, '🤔 عندي أكتر من موظف بنفس الاسم: $opts. وضّح مين بالظبط؟');
+    }
+    return _Resolved(matches.first, null);
+  }
+
+  static _Resolved<Supplier> _resolveSupplier(String name) {
+    if (name.trim().isEmpty) return const _Resolved(null, '❓ محتاج اسم المورد.');
+    final matches = StorageService.suppliersMatching(name);
+    if (matches.isEmpty) return _Resolved(null, '❓ لم أجد مورد باسم $name.');
+    if (matches.length > 1) {
+      final opts = matches.map((s) => '${s.name} (${s.itemType})').join(' / ');
+      return _Resolved(null, '🤔 عندي أكتر من مورد بنفس الاسم: $opts. وضّح مين بالظبط؟');
+    }
+    return _Resolved(matches.first, null);
+  }
+
+  // ---------------- Employees ----------------
 
   static Future<String> _addEmployee(Map<String, dynamic> d) async {
     final e = Employee(
@@ -52,8 +90,9 @@ class AssistantController {
 
   static Future<String> _addAdvance(Map<String, dynamic> d, String text) async {
     final name = d['person'] ?? d['employee_name'] ?? '';
-    final e = StorageService.findEmployee(name);
-    if (e == null) return '❓ لم أجد موظف باسم $name.';
+    final resolved = _resolveEmployee(name);
+    if (!resolved.ok) return resolved.message!;
+    final e = resolved.value!;
     e.advances.add(Advance(
         id: const Uuid().v4(), amount: (d['amount'] as num?)?.toDouble() ?? 0, date: DateTime.now(), note: text));
     await StorageService.saveEmployee(e);
@@ -61,18 +100,22 @@ class AssistantController {
   }
 
   static Future<String> _markAttendance(Map<String, dynamic> d) async {
-    final e = StorageService.findEmployee(d['person'] ?? '');
-    if (e == null) return '❓ لم أجد الموظف.';
+    final resolved = _resolveEmployee(d['person'] ?? '');
+    if (!resolved.ok) return resolved.message!;
+    final e = resolved.value!;
     final day = DateTime.now().toIso8601String().substring(0, 10);
     if (!e.attendance.contains(day)) e.attendance.add(day);
     await StorageService.saveEmployee(e);
     return '✅ تم تسجيل حضور ${e.name} اليوم.';
   }
 
+  // ---------------- Suppliers ----------------
+
   static Future<String> _addSupplier(Map<String, dynamic> d) async {
     final name = d['person'] ?? 'مورد';
-    final existing = StorageService.findSupplier(name);
-    if (existing != null) return 'ℹ️ المورد ${existing.name} مسجل بالفعل.';
+    if (StorageService.suppliersMatching(name).isNotEmpty) {
+      return 'ℹ️ عندي مورد بنفس الاسم مسجل بالفعل.';
+    }
     final s = Supplier(
       id: const Uuid().v4(),
       name: name,
@@ -86,8 +129,17 @@ class AssistantController {
 
   static Future<String> _supplierDelivery(Map<String, dynamic> d) async {
     final name = d['person'] ?? '';
-    var s = StorageService.findSupplier(name);
-    s ??= Supplier(id: const Uuid().v4(), name: name.isEmpty ? 'مورد' : name, itemType: d['supplier_item'] ?? '');
+    var resolved = _resolveSupplier(name);
+    Supplier s;
+    if (!resolved.ok) {
+      // لو مفيش مورد بهذا الاسم خالص (مش التباس)، ننشئه تلقائيًا بدل الرفض —
+      // لكن لو فيه التباس (أكتر من واحد) نوقف ونطلب توضيح.
+      final matches = StorageService.suppliersMatching(name);
+      if (matches.length > 1) return resolved.message!;
+      s = Supplier(id: const Uuid().v4(), name: name.isEmpty ? 'مورد' : name, itemType: d['supplier_item'] ?? '');
+    } else {
+      s = resolved.value!;
+    }
     final del = Delivery(
       id: const Uuid().v4(),
       item: d['delivery_item'] ?? s.itemType,
@@ -108,14 +160,20 @@ class AssistantController {
       remindAt: rem,
     );
     await StorageService.saveCommitment(c);
-    await NotificationService.scheduleCommitment(c);
-    return '✅ متوقع توريد ${del.item.isEmpty ? '' : '${del.item} '}من ${s.name} يوم ${del.expectedDate.toString().substring(0, 10)}.';
+    final outcome = await ReminderService.createAndSchedule(
+      title: 'توريد متوقع: ${s.name}',
+      body: c.textOriginal.isEmpty ? 'توريد ${del.item} من ${s.name}' : c.textOriginal,
+      dueAt: rem,
+      relatedEntityId: c.id,
+      relatedEntityType: 'commitment',
+    );
+    return '✅ متوقع توريد ${del.item.isEmpty ? '' : '${del.item} '}من ${s.name} يوم ${del.expectedDate.toString().substring(0, 10)}.${outcome.warningSuffix}';
   }
 
   static Future<String> _markDeliveryReceived(Map<String, dynamic> d) async {
-    final name = d['person'] ?? '';
-    final s = StorageService.findSupplier(name);
-    if (s == null) return '❓ لم أجد مورد باسم $name.';
+    final resolved = _resolveSupplier(d['person'] ?? '');
+    if (!resolved.ok) return resolved.message!;
+    final s = resolved.value!;
     final pending = s.pendingDeliveries;
     if (pending.isEmpty) return '❓ مفيش توريدات متوقعة من ${s.name} حالياً.';
     final del = pending.first;
@@ -128,14 +186,16 @@ class AssistantController {
   }
 
   static Future<String> _addSupplierPayment(Map<String, dynamic> d) async {
-    final name = d['person'] ?? '';
-    final s = StorageService.findSupplier(name);
-    if (s == null) return '❓ لم أجد مورد باسم $name.';
+    final resolved = _resolveSupplier(d['person'] ?? '');
+    if (!resolved.ok) return resolved.message!;
+    final s = resolved.value!;
     s.payments.add(SupplierPayment(
         id: const Uuid().v4(), amount: (d['amount'] as num?)?.toDouble() ?? 0, date: DateTime.now()));
     await StorageService.saveSupplier(s);
     return '✅ سجلت دفعة لـ ${s.name}. المتبقي عليك له: ${s.balanceDue.toStringAsFixed(0)} جنيه.';
   }
+
+  // ---------------- Rules ----------------
 
   static Future<String> _addRule(Map<String, dynamic> d) async {
     final freq = d['rule_frequency'] ?? 'monthly';
@@ -171,6 +231,8 @@ class AssistantController {
     return '✅ قاعدة متابعة جديدة: ${r.text}\nهتتفعل أول مرة يوم ${r.nextDue.toString().substring(0, 10)}.';
   }
 
+  // ---------------- Commitments ----------------
+
   static Future<String> _createCommitment(Map<String, dynamic> d, String text) async {
     final due = DateTime.tryParse(d['due_date'] ?? '') ?? DateTime.now().add(const Duration(days: 1));
     final rem = DateTime.tryParse((d['remind_at'] ?? '').replaceFirst(' ', 'T')) ?? due.subtract(const Duration(hours: 1));
@@ -185,7 +247,61 @@ class AssistantController {
       followUpRule: d['follow_up_rule'] ?? '',
     );
     await StorageService.saveCommitment(c);
-    await NotificationService.scheduleCommitment(c);
-    return 'تمام ✅ سجلت ${c.person}${c.amount == null ? '' : ' - ${c.amount!.toStringAsFixed(0)} جنيه'}، والتذكير ${c.remindAt.toString().substring(0, 16)}.';
+    final outcome = await ReminderService.createAndSchedule(
+      title: 'تذكير: ${c.person}',
+      body: c.textOriginal,
+      dueAt: c.remindAt,
+      relatedEntityId: c.id,
+      relatedEntityType: 'commitment',
+    );
+    return 'تمام ✅ سجلت ${c.person}${c.amount == null ? '' : ' - ${c.amount!.toStringAsFixed(0)} جنيه'}، والتذكير ${c.remindAt.toString().substring(0, 16)}.${outcome.warningSuffix}';
+  }
+
+  // ---------------- Live business queries (من قاعدة البيانات مباشرة، مش من ذاكرة المحادثة) ----------------
+
+  static Future<String> _queryBusinessData(Map<String, dynamic> d) async {
+    final type = d['query_type'] ?? '';
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
+    switch (type) {
+      case 'debtors':
+      case 'who_owes':
+        final debts = StorageService.commitments()
+            .where((c) => c.status == 'pending' && c.type == 'debt_to_collect' && (c.amount ?? 0) > 0)
+            .toList();
+        if (debts.isEmpty) return 'مفيش حد عليه فلوس مسجل دلوقتي. 🎉';
+        final lines = debts.map((c) => '• ${c.person}: ${c.amount!.toStringAsFixed(0)} ج (${c.dueDate.toString().substring(0, 10)})');
+        return 'اللي عليهم فلوس:\n${lines.join('\n')}';
+
+      case 'absent_today':
+        final emps = StorageService.employees().where((e) => !e.archived).toList();
+        final todayStr = today.toIso8601String().substring(0, 10);
+        final absent = emps.where((e) => !e.attendance.contains(todayStr)).toList();
+        if (absent.isEmpty) return 'كل العاملين سجلوا حضورهم النهاردة. ✅';
+        return 'لسه ما سجلوش حضور النهاردة:\n${absent.map((e) => '• ${e.name}').join('\n')}';
+
+      case 'supplier_balance':
+        final name = d['person'] ?? '';
+        final resolved = _resolveSupplier(name);
+        if (!resolved.ok) return resolved.message!;
+        final s = resolved.value!;
+        return 'المستحق عليك لـ ${s.name}: ${s.balanceDue.toStringAsFixed(0)} جنيه.';
+
+      case 'advances_this_week':
+        final weekAgo = today.subtract(const Duration(days: 7));
+        final rows = <String>[];
+        for (final e in StorageService.employees()) {
+          final recent = e.advances.where((a) => a.date.isAfter(weekAgo));
+          for (final a in recent) {
+            rows.add('• ${e.name}: ${a.amount.toStringAsFixed(0)} ج (${a.date.toString().substring(0, 10)})');
+          }
+        }
+        if (rows.isEmpty) return 'مفيش سلف اتسجلت في آخر أسبوع.';
+        return 'السلف في آخر أسبوع:\n${rows.join('\n')}';
+
+      default:
+        return 'تقدر تسأل: "مين عليه فلوس؟" أو "مين ما حضرش النهارده؟" أو "كام للمورد [الاسم]؟" أو "مين أخد سلف الأسبوع ده؟"';
+    }
   }
 }

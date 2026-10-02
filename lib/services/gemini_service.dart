@@ -25,6 +25,11 @@ class GeminiService {
 - mark_delivery_received: تأكيد استلام توريد (ويُحسب كدين على المحل للمورد لو ذُكر مبلغ)
 - add_supplier_payment: سداد مبلغ لمورد (تقليل المديونية)
 - add_rule: قاعدة متابعة متكررة زي "كل أول الشهر فكرني بالإيجار" أو "كل جمعة ابعتلي ملخص"
+- query_business_data: سؤال عن بيانات حالية فعلية (وليس طلب تسجيل شيء جديد)، مثل:
+  "مين عليه فلوس؟" → query_type: debtors
+  "مين ما حضرش النهارده؟" → query_type: absent_today
+  "كام للمورد محمود؟" → query_type: supplier_balance, person: محمود
+  "مين أخد سلف الأسبوع ده؟" → query_type: advances_this_week
 - other: أي حاجة مش واضحة
 
 الحقول المطلوبة حسب النية:
@@ -43,6 +48,7 @@ delivery_unit: وحدة القياس (كيلو/كرتونة/لتر...)
 rule_text: نص القاعدة كاملاً
 rule_frequency: monthly/weekly/daily
 rule_anchor: رقم يوم الشهر (1-31) لو شهرية، أو رقم يوم الأسبوع (1=إثنين..7=أحد) لو أسبوعية
+query_type: لـ query_business_data فقط: debtors/absent_today/supplier_balance/advances_this_week
 text_original: نص المستخدم كما هو
 
 افهم التواريخ النسبية: بكرة، بعده، الخميس الجاي، أول الشهر، آخر الشهر.
@@ -84,6 +90,7 @@ text_original: نص المستخدم كما هو
             'rule_text': {'type': 'STRING'},
             'rule_frequency': {'type': 'STRING'},
             'rule_anchor': {'type': 'NUMBER', 'nullable': true},
+            'query_type': {'type': 'STRING'},
             'text_original': {'type': 'STRING'},
           },
           'required': ['intent', 'text_original']

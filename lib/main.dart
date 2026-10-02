@@ -10,6 +10,7 @@ Future<void> main() async {
   await StorageService.init();
   tz.initializeTimeZones();
   await NotificationService.init();
+  await NotificationService.requestPermission();
   await RulesService.checkAndTrigger();
   runApp(const ManagerApp());
 }

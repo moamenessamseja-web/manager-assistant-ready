@@ -77,6 +77,7 @@ class Supplier {
   List<SupplierPayment> payments; // ما تم سداده
   List<Delivery> deliveries; // توريدات متوقعة ومستلمة
   String note;
+  bool archived;
 
   Supplier({
     required this.id,
@@ -87,6 +88,7 @@ class Supplier {
     List<SupplierPayment>? payments,
     List<Delivery>? deliveries,
     this.note = '',
+    this.archived = false,
   })  : payments = payments ?? [],
         deliveries = deliveries ?? [];
 
@@ -105,6 +107,7 @@ class Supplier {
         'payments': payments.map((p) => p.toJson()).toList(),
         'deliveries': deliveries.map((d) => d.toJson()).toList(),
         'note': note,
+        'archived': archived,
       };
 
   factory Supplier.fromJson(Map<String, dynamic> j) => Supplier(
@@ -120,5 +123,6 @@ class Supplier {
             .map((e) => Delivery.fromJson(Map<String, dynamic>.from(e)))
             .toList(),
         note: j['note'] ?? '',
+        archived: j['archived'] ?? false,
       );
 }
