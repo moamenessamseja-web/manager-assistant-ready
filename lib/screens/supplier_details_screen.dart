@@ -17,13 +17,41 @@ class _SupplierDetailsScreenState extends State<SupplierDetailsScreen> {
     s = widget.supplier;
   }
 
+  bool get _hasHistory => s.deliveries.isNotEmpty || s.payments.isNotEmpty;
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(s.name)),
+      appBar: AppBar(title: Text(s.name), actions: [
+        PopupMenuButton<String>(
+          onSelected: (v) async {
+            if (v == 'edit') {
+              _editDialog();
+            } else if (v == 'archive') {
+              s.archived = !s.archived;
+              await StorageService.saveSupplier(s);
+              setState(() {});
+            } else if (v == 'delete') {
+              _confirmDelete();
+            }
+          },
+          itemBuilder: (_) => [
+            const PopupMenuItem(value: 'edit', child: Text('تعديل')),
+            PopupMenuItem(value: 'archive', child: Text(s.archived ? 'إلغاء الأرشفة' : 'أرشفة')),
+            if (!_hasHistory) const PopupMenuItem(value: 'delete', child: Text('حذف نهائي')),
+          ],
+        ),
+      ]),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          if (s.archived)
+            Container(
+              padding: const EdgeInsets.all(8),
+              margin: const EdgeInsets.only(bottom: 12),
+              color: Colors.grey.shade300,
+              child: const Text('هذا المورد مؤرشف', textAlign: TextAlign.center),
+            ),
           Card(
             color: Colors.teal.withOpacity(0.06),
             child: Padding(
@@ -164,6 +192,62 @@ class _SupplierDetailsScreenState extends State<SupplierDetailsScreen> {
               }
             },
             child: const Text('حفظ'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _editDialog() {
+    final name = TextEditingController(text: s.name);
+    final item = TextEditingController(text: s.itemType);
+    final phone = TextEditingController(text: s.phone);
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('تعديل بيانات المورد'),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          TextField(controller: name, decoration: const InputDecoration(labelText: 'اسم المورد')),
+          TextField(controller: item, decoration: const InputDecoration(labelText: 'الصنف')),
+          TextField(controller: phone, decoration: const InputDecoration(labelText: 'تليفون')),
+        ]),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              if (name.text.trim().isEmpty) return;
+              s.name = name.text.trim();
+              s.itemType = item.text.trim();
+              s.phone = phone.text.trim();
+              await StorageService.saveSupplier(s);
+              if (mounted) {
+                Navigator.pop(context);
+                setState(() {});
+              }
+            },
+            child: const Text('حفظ'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmDelete() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('حذف نهائي'),
+        content: Text('هتحذف ${s.name} نهائيًا. متأكد؟'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+          TextButton(
+            onPressed: () async {
+              await StorageService.deleteSupplier(s.id);
+              if (mounted) {
+                Navigator.pop(ctx);
+                Navigator.pop(context);
+              }
+            },
+            child: const Text('حذف', style: TextStyle(color: Colors.red)),
           ),
         ],
       ),
