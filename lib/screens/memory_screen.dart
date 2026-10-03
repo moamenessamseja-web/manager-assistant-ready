@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/storage_service.dart';
+import '../design/widgets.dart';
 
 class MemoryScreen extends StatefulWidget {
   const MemoryScreen({super.key});
@@ -37,16 +38,13 @@ class _MemoryScreenState extends State<MemoryScreen> {
         ),
         Expanded(
           child: query.isEmpty
-              ? const Center(child: Text('اكتب اسم للبحث في كل سجلاته السابقة.'))
+              ? const AppEmptyState(icon: Icons.search, title: 'ابحث بأي اسم', subtitle: 'عميل / مورد / موظف — وهيجيبلك كل سجلاته السابقة')
               : !hasResults
-                  ? const Center(child: Text('مفيش نتائج بهذا الاسم.'))
+                  ? const AppEmptyState(icon: Icons.search_off, title: 'مفيش نتائج بهذا الاسم')
                   : ListView(
                       children: [
                         if (employees.isNotEmpty) ...[
-                          const Padding(
-                            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                            child: Text('العاملين', style: TextStyle(fontWeight: FontWeight.bold)),
-                          ),
+                          const AppSectionHeader('العاملين'),
                           ...employees.map((e) => ListTile(
                                 leading: const Icon(Icons.person),
                                 title: Text(e.name),
@@ -54,10 +52,7 @@ class _MemoryScreenState extends State<MemoryScreen> {
                               )),
                         ],
                         if (suppliers.isNotEmpty) ...[
-                          const Padding(
-                            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                            child: Text('الموردين', style: TextStyle(fontWeight: FontWeight.bold)),
-                          ),
+                          const AppSectionHeader('الموردين'),
                           ...suppliers.map((s) => ListTile(
                                 leading: const Icon(Icons.local_shipping),
                                 title: Text(s.name),
@@ -65,10 +60,7 @@ class _MemoryScreenState extends State<MemoryScreen> {
                               )),
                         ],
                         if (commitments.isNotEmpty) ...[
-                          const Padding(
-                            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                            child: Text('الالتزامات والوعود السابقة', style: TextStyle(fontWeight: FontWeight.bold)),
-                          ),
+                          const AppSectionHeader('الالتزامات والوعود السابقة'),
                           ...commitments.map((c) => ListTile(
                                 leading: Icon(c.status == 'done' ? Icons.check_circle : Icons.schedule,
                                     color: c.status == 'done' ? Colors.green : Colors.orange),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/supplier.dart';
 import '../services/storage_service.dart';
+import '../design/widgets.dart';
 import 'supplier_details_screen.dart';
 
 class SuppliersScreen extends StatefulWidget {
@@ -36,14 +37,10 @@ class _S extends State<SuppliersScreen> {
         ),
         Expanded(
           child: shown.isEmpty
-              ? const Center(
-                  child: Padding(
-                    padding: EdgeInsets.all(24),
-                    child: Text(
-                      'لا يوجد موردين هنا.\nمثال: "اعمل مورد بن اسمه محمود"\nأو من الشات: "محمود هيجيب 20 كيلو بن السبت"',
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
+              ? const AppEmptyState(
+                  icon: Icons.local_shipping_outlined,
+                  title: 'لا يوجد موردين هنا',
+                  subtitle: 'مثال: "اعمل مورد بن اسمه محمود"\nأو من الشات: "محمود هيجيب 20 كيلو بن السبت"',
                 )
               : ListView(
                   children: shown.map((s) {

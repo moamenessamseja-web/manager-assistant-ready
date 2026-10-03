@@ -4,6 +4,7 @@ import 'services/storage_service.dart';
 import 'services/notification_service.dart';
 import 'services/rules_service.dart';
 import 'screens/main_shell.dart';
+import 'design/app_theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -21,7 +22,7 @@ class ManagerApp extends StatelessWidget {
   Widget build(BuildContext c) => MaterialApp(
         debugShowCheckedModeBanner: false,
         title: 'مساعد الإدارة',
-        theme: ThemeData(useMaterial3: true, colorSchemeSeed: Colors.teal),
+        theme: AppTheme.light(),
         home: const Directionality(textDirection: TextDirection.rtl, child: MainShell()),
       );
 }

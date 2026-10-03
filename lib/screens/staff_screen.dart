@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/employee.dart';
 import '../services/storage_service.dart';
+import '../design/widgets.dart';
 import 'employee_details_screen.dart';
 
 class StaffScreen extends StatefulWidget {
@@ -36,7 +37,11 @@ class _S extends State<StaffScreen> {
         ),
         Expanded(
           child: shown.isEmpty
-              ? const Center(child: Text('لا يوجد موظفون هنا.\nمثال: محمد بدأ شغل يوم 4 ومرتبه 4000', textAlign: TextAlign.center))
+              ? const AppEmptyState(
+                  icon: Icons.people_outline,
+                  title: 'لا يوجد موظفون هنا',
+                  subtitle: 'مثال: محمد بدأ شغل يوم 4 ومرتبه 4000',
+                )
               : ListView(
                   children: shown.map((e) => Card(
                         child: ListTile(

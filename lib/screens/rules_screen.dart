@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/rule.dart';
 import '../services/storage_service.dart';
+import '../design/widgets.dart';
 
 class RulesScreen extends StatefulWidget {
   const RulesScreen({super.key});
@@ -17,14 +18,10 @@ class _RulesScreenState extends State<RulesScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('القواعد والتنبيهات')),
       body: rules.isEmpty
-          ? const Center(
-              child: Padding(
-                padding: EdgeInsets.all(24),
-                child: Text(
-                  'لا يوجد قواعد متابعة بعد.\nمثال من الشات: "كل أول الشهر فكرني بالإيجار 8000"',
-                  textAlign: TextAlign.center,
-                ),
-              ),
+          ? const AppEmptyState(
+              icon: Icons.notifications_none,
+              title: 'لا يوجد قواعد متابعة بعد',
+              subtitle: 'مثال من الشات: "كل أول الشهر فكرني بالإيجار 8000"',
             )
           : ListView(
               children: rules.map((r) {
