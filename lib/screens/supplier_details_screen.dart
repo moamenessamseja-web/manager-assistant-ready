@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../models/supplier.dart';
 import '../services/storage_service.dart';
+import '../design/tokens.dart';
+import '../design/widgets.dart';
 
 class SupplierDetailsScreen extends StatefulWidget {
   final Supplier supplier;
@@ -43,33 +45,32 @@ class _SupplierDetailsScreenState extends State<SupplierDetailsScreen> {
         ),
       ]),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(AppSpace.x4),
         children: [
           if (s.archived)
-            Container(
-              padding: const EdgeInsets.all(8),
-              margin: const EdgeInsets.only(bottom: 12),
-              color: Colors.grey.shade300,
-              child: const Text('هذا المورد مؤرشف', textAlign: TextAlign.center),
+            const Padding(
+              padding: EdgeInsets.only(bottom: AppSpace.x3),
+              child: AppStatusBanner(message: 'هذا المورد مؤرشف', kind: AppStatusKind.warning),
             ),
           Card(
-            color: Colors.teal.withOpacity(0.06),
+            color: AppColors.primaryLight,
             child: Padding(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(AppSpace.x3),
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 if (s.itemType.isNotEmpty) Text('الصنف: ${s.itemType}'),
                 if (s.phone.isNotEmpty) Text('تليفون: ${s.phone}'),
                 Text('إجمالي قيمة البضاعة: ${s.totalOwed.toStringAsFixed(0)} ج'),
                 Text('إجمالي المدفوع: ${s.totalPaid.toStringAsFixed(0)} ج'),
+                const SizedBox(height: AppSpace.x1),
                 Text(
                   'المستحق عليك الآن: ${s.balanceDue.toStringAsFixed(0)} ج',
-                  style: TextStyle(
-                      fontWeight: FontWeight.bold, color: s.balanceDue > 0 ? Colors.red : Colors.green),
+                  style: AppText.titleMedium.copyWith(
+                      color: s.balanceDue > 0 ? AppColors.danger : AppColors.success),
                 ),
               ]),
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: AppSpace.x3),
           Row(children: [
             Expanded(
               child: ElevatedButton.icon(
@@ -81,11 +82,11 @@ class _SupplierDetailsScreenState extends State<SupplierDetailsScreen> {
                   onPressed: _addPayment, icon: const Icon(Icons.payments), label: const Text('تسجيل دفعة')),
             ),
           ]),
-          const Divider(height: 32),
-          const Text('التوريدات:', style: TextStyle(fontWeight: FontWeight.bold)),
+          const Divider(height: AppSpace.x8),
+          const AppSectionHeader('التوريدات'),
           ...s.deliveries.map((d) => ListTile(
                 leading: Icon(d.received ? Icons.check_circle : Icons.schedule,
-                    color: d.received ? Colors.green : Colors.orange),
+                    color: d.received ? AppColors.success : AppColors.warning),
                 title: Text('${d.item}${d.quantity == null ? '' : ' - ${d.quantity} ${d.unit}'}'),
                 subtitle: Text(d.received
                     ? 'استُلم: ${d.receivedDate?.toString().substring(0, 10) ?? ''}'
@@ -102,10 +103,10 @@ class _SupplierDetailsScreenState extends State<SupplierDetailsScreen> {
                         },
                       ),
               )),
-          const Divider(height: 32),
-          const Text('سجل الدفعات:', style: TextStyle(fontWeight: FontWeight.bold)),
+          const Divider(height: AppSpace.x8),
+          const AppSectionHeader('سجل الدفعات'),
           ...s.payments.map((p) => ListTile(
-                leading: const Icon(Icons.attach_money, color: Colors.green),
+                leading: const Icon(Icons.attach_money, color: AppColors.success),
                 title: Text('${p.amount.toStringAsFixed(0)} ج'),
                 subtitle: Text(p.date.toString().substring(0, 10)),
               )),
@@ -247,7 +248,7 @@ class _SupplierDetailsScreenState extends State<SupplierDetailsScreen> {
                 Navigator.pop(context);
               }
             },
-            child: const Text('حذف', style: TextStyle(color: Colors.red)),
+            child: const Text('حذف', style: TextStyle(color: AppColors.danger)),
           ),
         ],
       ),

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../services/notification_service.dart';
 import '../services/storage_service.dart';
+import '../design/tokens.dart';
+import '../design/widgets.dart';
 
 /// شاشة تشخيص غير مخصصة للمستخدم العادي — تساعد في معرفة سبب عدم وصول
 /// تنبيه بسرعة: هل الصلاحية ممنوحة؟ هل فيه تذكيرات متعطلة؟ هل الجدولة فعلاً حصلت؟
@@ -38,27 +40,27 @@ class _NotificationDebugScreenState extends State<NotificationDebugScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('تشخيص الإشعارات')),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(AppSpace.x4),
         children: [
           Card(
             child: Padding(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(AppSpace.x3),
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Row(children: [
                   Icon(_granted == true ? Icons.check_circle : Icons.cancel,
-                      color: _granted == true ? Colors.green : Colors.red),
-                  const SizedBox(width: 8),
+                      color: _granted == true ? AppColors.success : AppColors.danger),
+                  const SizedBox(width: AppSpace.x2),
                   Text('صلاحية الإشعارات: ${_granted == null ? '...' : (_granted! ? 'ممنوحة' : 'غير ممنوحة')}'),
                 ]),
-                const SizedBox(height: 8),
+                const SizedBox(height: AppSpace.x2),
                 Text('الإشعارات المجدولة حالياً عند النظام: $_pendingCount'),
                 Text('إجمالي التذكيرات المسجلة: ${reminders.length}'),
-                Text('تذكيرات بها مشكلة: ${failed.length}',
-                    style: TextStyle(color: failed.isEmpty ? null : Colors.orange, fontWeight: FontWeight.bold)),
+                const SizedBox(height: AppSpace.x2),
+                if (failed.isNotEmpty) AppBadge('${failed.length} تذكيرات بها مشكلة', kind: AppStatusKind.warning),
               ]),
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: AppSpace.x3),
           Row(children: [
             Expanded(
               child: ElevatedButton(
@@ -69,7 +71,7 @@ class _NotificationDebugScreenState extends State<NotificationDebugScreen> {
                 child: const Text('طلب الصلاحية'),
               ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: AppSpace.x2),
             Expanded(
               child: ElevatedButton(
                 onPressed: () async {
@@ -88,10 +90,10 @@ class _NotificationDebugScreenState extends State<NotificationDebugScreen> {
               ),
             ),
           ]),
-          if (_testResult.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 8), child: Text(_testResult)),
-          const Divider(height: 32),
-          const Text('آخر التذكيرات:', style: TextStyle(fontWeight: FontWeight.bold)),
-          if (reminders.isEmpty) const Padding(padding: EdgeInsets.all(12), child: Text('لا يوجد تذكيرات بعد.')),
+          if (_testResult.isNotEmpty) Padding(padding: const EdgeInsets.only(top: AppSpace.x2), child: Text(_testResult)),
+          const Divider(height: AppSpace.x8),
+          const AppSectionHeader('آخر التذكيرات'),
+          if (reminders.isEmpty) const Padding(padding: EdgeInsets.all(AppSpace.x3), child: Text('لا يوجد تذكيرات بعد.', style: AppText.bodyMuted)),
           ...reminders.take(30).map((r) => ListTile(
                 dense: true,
                 leading: Icon(
@@ -101,10 +103,10 @@ class _NotificationDebugScreenState extends State<NotificationDebugScreen> {
                           ? Icons.block
                           : Icons.error_outline,
                   color: r.status == 'scheduled'
-                      ? Colors.green
+                      ? AppColors.success
                       : r.status == 'cancelled'
-                          ? Colors.grey
-                          : Colors.red,
+                          ? AppColors.textDisabled
+                          : AppColors.danger,
                 ),
                 title: Text(r.title),
                 subtitle: Text('${r.status} — ${r.dueAt.toString().substring(0, 16)}'),

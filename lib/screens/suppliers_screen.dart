@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/supplier.dart';
 import '../services/storage_service.dart';
+import '../design/tokens.dart';
 import '../design/widgets.dart';
 import 'supplier_details_screen.dart';
 
@@ -59,7 +60,7 @@ class _S extends State<SuppliersScreen> {
                         trailing: Row(mainAxisSize: MainAxisSize.min, children: [
                           if (!s.archived)
                             Icon(s.balanceDue > 0 ? Icons.warning_amber_rounded : Icons.check_circle,
-                                color: s.balanceDue > 0 ? Colors.orange : Colors.green),
+                                color: s.balanceDue > 0 ? AppColors.warning : AppColors.success),
                           PopupMenuButton<String>(
                             onSelected: (v) async {
                               if (v == 'edit') {

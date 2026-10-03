@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 import '../models/employee.dart';
 import '../services/storage_service.dart';
+import '../design/tokens.dart';
+import '../design/widgets.dart';
 
 class EmployeeDetailsScreen extends StatefulWidget {
   final Employee employee;
@@ -59,28 +61,26 @@ class _S extends State<EmployeeDetailsScreen> {
             ),
           ],
         ),
-        body: ListView(padding: const EdgeInsets.all(16), children: [
+        body: ListView(padding: const EdgeInsets.all(AppSpace.x4), children: [
           if (e.archived)
-            Container(
-              padding: const EdgeInsets.all(8),
-              margin: const EdgeInsets.only(bottom: 12),
-              color: Colors.grey.shade300,
-              child: const Text('هذا الموظف مؤرشف', textAlign: TextAlign.center),
+            const Padding(
+              padding: EdgeInsets.only(bottom: AppSpace.x3),
+              child: AppStatusBanner(message: 'هذا الموظف مؤرشف', kind: AppStatusKind.warning),
             ),
           Text('الوظيفة: ${e.role}'),
           Text('المرتب: ${e.salaryMonthly.toStringAsFixed(0)} ج'),
           Text('الحضور: ${e.attendance.length} | الغياب التقريبي: ${e.absenceDays}'),
           Text('السلف: ${e.totalAdvances.toStringAsFixed(0)} ج'),
           Text('المتبقي: ${e.remainingSalary.toStringAsFixed(0)} ج'),
-          const SizedBox(height: 16),
+          const SizedBox(height: AppSpace.x4),
           Row(children: [
             Expanded(child: ElevatedButton.icon(onPressed: _advance, icon: const Icon(Icons.money_off), label: const Text('سلفة'))),
-            const SizedBox(width: 8),
+            const SizedBox(width: AppSpace.x2),
             Expanded(child: ElevatedButton.icon(onPressed: _attendance, icon: const Icon(Icons.check), label: const Text('حضور اليوم'))),
           ]),
-          const Divider(height: 32),
-          const Text('آخر الحركات:', style: TextStyle(fontWeight: FontWeight.bold)),
-          if (_timeline.isEmpty) const Padding(padding: EdgeInsets.all(12), child: Text('أول حركة ستظهر هنا.')),
+          const Divider(height: AppSpace.x8),
+          const AppSectionHeader('آخر الحركات'),
+          if (_timeline.isEmpty) const Padding(padding: EdgeInsets.all(AppSpace.x3), child: Text('أول حركة ستظهر هنا.', style: AppText.bodyMuted)),
           ..._timeline.map((t) => ListTile(dense: true, title: Text(t.value), subtitle: Text(t.key.toString().substring(0, 10)))),
         ]),
       );
@@ -162,7 +162,7 @@ class _S extends State<EmployeeDetailsScreen> {
                 Navigator.pop(context);
               }
             },
-            child: const Text('حذف', style: TextStyle(color: Colors.red)),
+            child: const Text('حذف', style: TextStyle(color: AppColors.danger)),
           ),
         ],
       ),

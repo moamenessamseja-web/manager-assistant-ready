@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/storage_service.dart';
+import '../design/tokens.dart';
 import '../design/widgets.dart';
 
 class MemoryScreen extends StatefulWidget {
@@ -63,7 +64,7 @@ class _MemoryScreenState extends State<MemoryScreen> {
                           const AppSectionHeader('الالتزامات والوعود السابقة'),
                           ...commitments.map((c) => ListTile(
                                 leading: Icon(c.status == 'done' ? Icons.check_circle : Icons.schedule,
-                                    color: c.status == 'done' ? Colors.green : Colors.orange),
+                                    color: c.status == 'done' ? AppColors.success : AppColors.warning),
                                 title: Text('${c.person}${c.amount == null ? '' : ' - ${c.amount!.toStringAsFixed(0)} ج'}'),
                                 subtitle: Text('${c.textOriginal}\n${c.dueDate.toString().substring(0, 10)} — ${c.status == 'done' ? 'تم' : 'لسه قائم'}'),
                                 isThreeLine: true,

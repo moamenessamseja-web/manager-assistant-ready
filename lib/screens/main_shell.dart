@@ -7,6 +7,7 @@ import 'suppliers_screen.dart';
 import 'rules_screen.dart';
 import 'brief_screen.dart';
 import 'settings_screen.dart';
+import '../design/tokens.dart';
 
 class MainShell extends StatefulWidget {
   const MainShell({super.key});
@@ -45,11 +46,11 @@ class _MainShellState extends State<MainShell> {
         child: ListView(
           padding: EdgeInsets.zero,
           children: [
-            const DrawerHeader(
-              decoration: BoxDecoration(color: Colors.teal),
+            DrawerHeader(
+              decoration: const BoxDecoration(color: AppColors.primary),
               child: Align(
                 alignment: Alignment.bottomRight,
-                child: Text('مساعد الإدارة', style: TextStyle(color: Colors.white, fontSize: 20)),
+                child: Text('مساعد الإدارة', style: AppText.h1.copyWith(color: Colors.white)),
               ),
             ),
             for (var i = 0; i < _secondary.length; i++)
@@ -68,8 +69,8 @@ class _MainShellState extends State<MainShell> {
       floatingActionButton: FloatingActionButton.small(
         heroTag: 'menuBtn',
         onPressed: () => _scaffoldKey.currentState?.openDrawer(),
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.teal,
+        backgroundColor: AppColors.surface,
+        foregroundColor: AppColors.primary,
         child: const Icon(Icons.menu),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
