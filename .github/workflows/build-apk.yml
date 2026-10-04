@@ -33,7 +33,8 @@ jobs:
             for perm in \
               'android.permission.RECORD_AUDIO' \
               'android.permission.POST_NOTIFICATIONS' \
-              'android.permission.INTERNET'; do
+              'android.permission.INTERNET' \
+              'android.permission.RECEIVE_BOOT_COMPLETED'; do
               if ! grep -q "$perm" "$MANIFEST"; then
                 sed -i "/<manifest /a\\    <uses-permission android:name=\"$perm\" />" "$MANIFEST"
               fi
@@ -41,6 +42,33 @@ jobs:
             echo "---- AndroidManifest.xml after injection ----"
             cat "$MANIFEST"
           fi
+
+      - name: Register flutter_local_notifications boot receiver (reminders survive reboot)
+        run: |
+          MANIFEST="android/app/src/main/AndroidManifest.xml"
+          if [ -f "$MANIFEST" ] && ! grep -q "ScheduledNotificationBootReceiver" "$MANIFEST"; then
+            # flutter_local_notifications ships these two receiver classes inside its own
+            # Android library (no custom native code needed). ScheduledNotificationBootReceiver
+            # listens for BOOT_COMPLETED and re-arms the plugin's own natively-persisted
+            # pending notification requests directly — no Dart/Flutter execution required at
+            # boot time, so this does not introduce a second scheduling architecture.
+            # Must be a child of <application>, not <manifest>, hence anchored on the fixed
+            # literal line that closes <application ...> in Flutter's current template
+            # (verified against flutter/flutter packages/flutter_tools templates source).
+            cat > /tmp/boot_receiver_block.xml << 'RECEIVER_EOF'
+          <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver" />
+          <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver">
+              <intent-filter>
+                  <action android:name="android.intent.action.BOOT_COMPLETED" />
+                  <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                  <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+              </intent-filter>
+          </receiver>
+          RECEIVER_EOF
+            sed -i '/android:icon="@mipmap\/ic_launcher">/r /tmp/boot_receiver_block.xml' "$MANIFEST"
+          fi
+          echo "---- AndroidManifest.xml after boot-receiver injection ----"
+          cat "$MANIFEST"
 
       - name: Enable core library desugaring (required by flutter_local_notifications)
         run: |
