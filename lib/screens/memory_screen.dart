@@ -50,6 +50,7 @@ class _MemoryScreenState extends State<MemoryScreen> {
                                 leading: const Icon(Icons.person),
                                 title: Text(e.name),
                                 subtitle: Text('المتبقي له: ${e.remainingSalary.toStringAsFixed(0)} ج | سلف: ${e.totalAdvances.toStringAsFixed(0)} ج'),
+                                trailing: e.archived ? const AppBadge('مؤرشف', kind: AppStatusKind.warning) : null,
                               )),
                         ],
                         if (suppliers.isNotEmpty) ...[
@@ -58,6 +59,7 @@ class _MemoryScreenState extends State<MemoryScreen> {
                                 leading: const Icon(Icons.local_shipping),
                                 title: Text(s.name),
                                 subtitle: Text('المستحق عليك: ${s.balanceDue.toStringAsFixed(0)} ج'),
+                                trailing: s.archived ? const AppBadge('مؤرشف', kind: AppStatusKind.warning) : null,
                               )),
                         ],
                         if (commitments.isNotEmpty) ...[

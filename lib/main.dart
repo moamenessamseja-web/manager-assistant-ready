@@ -3,6 +3,7 @@ import 'package:timezone/data/latest_all.dart' as tz;
 import 'services/storage_service.dart';
 import 'services/notification_service.dart';
 import 'services/rules_service.dart';
+import 'services/reminder_service.dart';
 import 'screens/main_shell.dart';
 import 'design/app_theme.dart';
 
@@ -12,6 +13,7 @@ Future<void> main() async {
   tz.initializeTimeZones();
   await NotificationService.init();
   await NotificationService.requestPermission();
+  await ReminderService.rescheduleAllActive();
   await RulesService.checkAndTrigger();
   runApp(const ManagerApp());
 }

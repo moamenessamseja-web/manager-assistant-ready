@@ -8,14 +8,27 @@ class BriefScreen extends StatelessWidget {
   @override
   Widget build(BuildContext c) {
     final cs = StorageService.commitments();
-    final es = StorageService.employees().where((e) => !e.archived).toList();
-    final ss = StorageService.suppliers().where((s) => !s.archived).toList();
+    final allEmployees = StorageService.employees();
+    final allSuppliers = StorageService.suppliers();
+    final es = allEmployees.where((e) => !e.archived).toList();
+    final ss = allSuppliers.where((s) => !s.archived).toList();
+
+    // الملخص المالي النشط لازم يحسب "متأخرات العملاء" فقط، مش كل أنواع
+    // الالتزامات (موردين/قواعد/مهام) اللي كانت بتتجمع كلها قبل كده تحت
+    // نفس الرقم بالغلط.
     final overdue = cs
-        .where((x) => x.status == 'pending' && x.dueDate.isBefore(DateTime.now()))
+        .where((x) => x.status == 'pending' && x.type == 'debt_to_collect' && x.dueDate.isBefore(DateTime.now()))
         .fold(0.0, (s, x) => s + (x.amount ?? 0));
     final adv = es.fold(0.0, (s, e) => s + e.totalAdvances);
     final suppliersDue = ss.fold(0.0, (s, e) => s + e.balanceDue);
     final pendingDeliveries = ss.fold<int>(0, (s, e) => s + e.pendingDeliveries.length);
+
+    // أرشفة مورد/موظف وعليه مستحقات ما تماثلوش — الرقم بيفضل محفوظ تاريخيًا
+    // وبيتعرض هنا بوضوح كـ"مؤرشف" بدل ما يختفي بصمت من الملخص.
+    final archivedSuppliersWithBalance = allSuppliers.where((s) => s.archived && s.balanceDue > 0).toList();
+    final archivedSuppliersBalance = archivedSuppliersWithBalance.fold(0.0, (s, x) => s + x.balanceDue);
+    final archivedEmployeesWithBalance = allEmployees.where((e) => e.archived && e.remainingSalary > 0).toList();
+    final archivedEmployeesBalance = archivedEmployeesWithBalance.fold(0.0, (s, x) => s + x.remainingSalary);
 
     return Scaffold(
       appBar: AppBar(title: const Text('بريف الأسبوع')),
@@ -41,6 +54,22 @@ class BriefScreen extends StatelessWidget {
               ]),
             ),
           ),
+          if (archivedSuppliersWithBalance.isNotEmpty || archivedEmployeesWithBalance.isNotEmpty) ...[
+            const AppSectionHeader('مؤرشفين وعليهم مستحقات قديمة'),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(AppSpace.x4),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  if (archivedSuppliersWithBalance.isNotEmpty)
+                    _row('موردين مؤرشفين (${archivedSuppliersWithBalance.length})',
+                        '${archivedSuppliersBalance.toStringAsFixed(0)} ج', AppStatusKind.warning),
+                  if (archivedEmployeesWithBalance.isNotEmpty)
+                    _row('عاملين مؤرشفين (${archivedEmployeesWithBalance.length})',
+                        '${archivedEmployeesBalance.toStringAsFixed(0)} ج', AppStatusKind.warning),
+                ]),
+              ),
+            ),
+          ],
           const SizedBox(height: AppSpace.x4),
           const Text('هذا ملخص حسابي من البيانات المحلية المسجلة على جهازك.', style: AppText.bodyMuted),
         ],

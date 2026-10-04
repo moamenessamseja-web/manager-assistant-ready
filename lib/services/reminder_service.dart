@@ -75,4 +75,27 @@ class ReminderService {
     await StorageService.saveReminder(r);
     return ReminderOutcome(res.success, res.status, r);
   }
+
+  /// يُستدعى عند كل فتح للتطبيق (main.dart) — يعيد تسليح كل التذكيرات
+  /// النشطة (status=='scheduled', enabled, وموعدها لسه في المستقبل) عبر
+  /// نفس مسار الجدولة الموجود (NotificationService.scheduleAt)، من غير أي
+  /// معمارية تانية. العملية idempotent: نفس id التذكير بيستبدل أي جدولة
+  /// سابقة عند نظام التشغيل، مش بيكررها.
+  ///
+  /// ملاحظة صريحة: ده مش Boot Receiver حقيقي (مفيش استقبال فعلي لحدث
+  /// BOOT_COMPLETED على مستوى النظام) — راجع .agent/IMPLEMENTATION_STATE.md
+  /// لتفاصيل السبب المعماري والحد اللي بتغطيه الطريقة دي فعليًا.
+  static Future<void> rescheduleAllActive() async {
+    final now = DateTime.now();
+    for (final r in StorageService.reminders()) {
+      if (!r.enabled || r.status != 'scheduled') continue;
+      if (r.dueAt.isBefore(now)) continue;
+      final res = await NotificationService.scheduleAt(r.id.hashCode, r.title, r.body, r.dueAt);
+      if (res.status != r.status) {
+        r.status = res.status;
+        r.updatedAt = DateTime.now();
+        await StorageService.saveReminder(r);
+      }
+    }
+  }
 }
