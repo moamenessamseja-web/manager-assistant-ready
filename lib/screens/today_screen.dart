@@ -2,9 +2,27 @@ import 'package:flutter/material.dart';
 import '../models/commitment.dart';
 import '../services/storage_service.dart';
 import '../services/reminder_service.dart';
+import '../services/assistant_controller.dart';
 import '../design/tokens.dart';
 import '../design/widgets.dart';
 import 'notification_debug_screen.dart';
+
+const _arabicWeekdays = ['الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت', 'الأحد'];
+const _arabicMonths = [
+  'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',
+  'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر',
+];
+
+String _greeting(DateTime now) {
+  if (now.hour < 5) return 'سهران لسه؟';
+  if (now.hour < 12) return 'صباح الخير ☀️';
+  if (now.hour < 17) return 'يومك سعيد';
+  if (now.hour < 21) return 'مساء الخير 🌇';
+  return 'مساء الخير 🌙';
+}
+
+String _arabicDate(DateTime now) =>
+    '${_arabicWeekdays[now.weekday - 1]}، ${now.day} ${_arabicMonths[now.month - 1]}';
 
 /// اليوم — Operational dashboard: إيه اللي محتاج انتباه دلوقتي، مش مجرد تقرير.
 class TodayScreen extends StatefulWidget {
@@ -14,6 +32,36 @@ class TodayScreen extends StatefulWidget {
 }
 
 class _S extends State<TodayScreen> {
+  final _capture = TextEditingController();
+  bool _busy = false;
+
+  @override
+  void dispose() {
+    _capture.dispose();
+    super.dispose();
+  }
+
+  // نقطة دخول سريعة للمساعد من نفس شاشة اليوم — بدون الخروج للشات —
+  // بتستخدم نفس AssistantController.handle الموجود، من غير أي منطق AI جديد.
+  Future<void> _quickCapture() async {
+    final text = _capture.text.trim();
+    if (text.isEmpty || _busy) return;
+    setState(() => _busy = true);
+    try {
+      final reply = await AssistantController.handle(text);
+      _capture.clear();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(reply)));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('❌ $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
@@ -49,6 +97,41 @@ class _S extends State<TodayScreen> {
       body: ListView(
         padding: const EdgeInsets.symmetric(vertical: AppSpace.x2),
         children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(AppSpace.x4, AppSpace.x2, AppSpace.x4, AppSpace.x1),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(_greeting(now), style: AppText.h1),
+              const SizedBox(height: AppSpace.x1),
+              Text(_arabicDate(now), style: AppText.bodyMuted),
+            ]),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpace.x4),
+            child: Card(
+              child: Padding(
+                padding: const EdgeInsets.all(AppSpace.x2),
+                child: Row(children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _capture,
+                      enabled: !_busy,
+                      onSubmitted: (_) => _quickCapture(),
+                      decoration: const InputDecoration(
+                        border: InputBorder.none,
+                        hintText: 'قول أو اكتب أي حاجة محتاج تسجلها…',
+                      ),
+                    ),
+                  ),
+                  _busy
+                      ? const Padding(
+                          padding: EdgeInsets.all(AppSpace.x2),
+                          child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
+                        )
+                      : IconButton(icon: const Icon(Icons.send, color: AppColors.primary), onPressed: _quickCapture),
+                ]),
+              ),
+            ),
+          ),
           if (brokenReminders.isNotEmpty)
             Padding(
               padding: const EdgeInsets.fromLTRB(AppSpace.x4, AppSpace.x2, AppSpace.x4, AppSpace.x2),
