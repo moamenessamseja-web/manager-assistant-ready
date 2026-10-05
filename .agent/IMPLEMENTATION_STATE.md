@@ -1,5 +1,31 @@
 # Implementation State
 
+## Branch: agent/sonnet/product-progress — Today Dashboard product-progress slice
+
+code commit: d869042 ("feat: redesign today dashboard — greeting + AI quick-capture entry point")
+Branch: agent/sonnet/product-progress (main untouched, per instruction)
+Build #22: GREEN — triggered manually via workflow_dispatch against this branch (the workflow only auto-triggers on push to main, so a manual dispatch was used to verify without touching main). APK: https://github.com/moamenessamseja-web/manager-assistant-ready/releases/tag/build-22
+
+### Why this slice
+Inspected the Master Brief V2 Phase 4 checklist (greeting / needs attention / daily summary / tasks / due payments / attendance issues / alerts / quick actions / AI entry point) against the Today screen as it stood after the earlier Phase 4 pass. Found: needs attention, daily summary (badges), tasks, due payments, attendance issues, alerts, and quick actions (done/postpone) were already implemented and wired to real data/ReminderService. Two items were genuinely absent: **greeting** and **AI entry point**. Chose this as the smallest coherent vertical slice because it closes a real gap against the product's own stated philosophy (chat-first input) without touching anything already working.
+
+### What changed
+Only `lib/screens/today_screen.dart`.
+1. Time-aware Arabic greeting ("صباح الخير" / "مساء الخير" / etc.) + Arabic date line (hand-rolled weekday/month name arrays — no `intl` locale initialization added, to avoid a runtime locale-data risk with zero existing `ar` locale setup in the project).
+2. A quick-capture input card at the top of the dashboard, wired directly to the **existing** `AssistantController.handle(text)` — the exact same entry point the Chat tab uses. No new AI/NLU logic. Lets the owner log a debt/task/supplier/employee item without leaving Today. Result surfaced via `SnackBar` (same confirmation pattern already used in `settings_screen.dart`); the dashboard recomputes from `StorageService` afterward so the new item appears immediately in the correct section (overdue/today/upcoming) — no new data path, same read-after-write pattern used elsewhere in the app.
+3. Voice input deliberately NOT added to this quick-capture bar (kept text-only) — speech-to-text remains on the dedicated Chat tab. Explicit scope boundary to keep this a small, low-risk slice; not a capability gap, since voice is already available one tab away.
+
+### Verification performed
+- Full-repo brace/paren/bracket balance check (no local Dart SDK available in this environment — unchanged constraint from all prior tasks).
+- `git diff --stat` confirmed only `lib/screens/today_screen.dart` changed — no business logic, storage, Reminder, notification, AI pipeline, or other-screen files touched.
+- Pushed to `agent/sonnet/product-progress` (main untouched) and manually dispatched the existing CI workflow against that branch ref — build #22 completed with conclusion `success`.
+- Not performed: on-device/manual UX testing of this specific slice (product owner has build-22 available to test, same as prior builds).
+
+### Known limitation / explicit scope boundary
+Voice input not wired into the Today quick-capture bar (text-only). Greeting/date are locale-independent hand-rolled strings, not using `intl`'s Arabic locale data (acceptable for this scope; would need `initializeDateFormatting('ar')` if the project later adopts `intl`-based Arabic date formatting elsewhere).
+
+---
+
 ## Task 3 — True Android BOOT_COMPLETED / reboot resilience: RESOLVED
 
 code commit: 6e32717 ("fix: harden reminder rescheduling across reboot")
