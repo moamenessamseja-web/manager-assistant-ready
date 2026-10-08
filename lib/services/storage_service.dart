@@ -5,6 +5,7 @@ import '../models/employee.dart';
 import '../models/supplier.dart';
 import '../models/rule.dart';
 import '../models/reminder.dart';
+import 'app_state.dart';
 
 class StorageService {
   static late SharedPreferences _p;
@@ -23,6 +24,7 @@ class StorageService {
       ..removeWhere((e) => e.id == c.id)
       ..add(c);
     await _p.setStringList('commitments', x.map((e) => jsonEncode(e.toJson())).toList());
+    AppState.instance.notify();
   }
 
   // ---------------- Employees ----------------
@@ -35,6 +37,7 @@ class StorageService {
       ..removeWhere((a) => a.id == e.id)
       ..add(e);
     await _p.setStringList('employees', x.map((a) => jsonEncode(a.toJson())).toList());
+    AppState.instance.notify();
   }
 
   static Employee? findEmployee(String name) {
@@ -49,6 +52,7 @@ class StorageService {
   static Future<void> deleteEmployee(String id) async {
     final x = employees()..removeWhere((e) => e.id == id);
     await _p.setStringList('employees', x.map((e) => jsonEncode(e.toJson())).toList());
+    AppState.instance.notify();
   }
 
   static List<Employee> employeesMatching(String name) =>
@@ -64,6 +68,7 @@ class StorageService {
       ..removeWhere((a) => a.id == s.id)
       ..add(s);
     await _p.setStringList('suppliers', x.map((a) => jsonEncode(a.toJson())).toList());
+    AppState.instance.notify();
   }
 
   static Supplier? findSupplier(String name) {
@@ -76,6 +81,7 @@ class StorageService {
   static Future<void> deleteSupplier(String id) async {
     final x = suppliers()..removeWhere((s) => s.id == id);
     await _p.setStringList('suppliers', x.map((s) => jsonEncode(s.toJson())).toList());
+    AppState.instance.notify();
   }
 
   static List<Supplier> suppliersMatching(String name) =>
@@ -91,11 +97,13 @@ class StorageService {
       ..removeWhere((a) => a.id == r.id)
       ..add(r);
     await _p.setStringList('rules', x.map((a) => jsonEncode(a.toJson())).toList());
+    AppState.instance.notify();
   }
 
   static Future<void> deleteRule(String id) async {
     final x = rules()..removeWhere((a) => a.id == id);
     await _p.setStringList('rules', x.map((a) => jsonEncode(a.toJson())).toList());
+    AppState.instance.notify();
   }
 
   // ---------------- Reminders (Reminder entity — مستقلة عن Task/Commitment) ----------------
@@ -108,11 +116,13 @@ class StorageService {
       ..removeWhere((a) => a.id == r.id)
       ..add(r);
     await _p.setStringList('reminders', x.map((a) => jsonEncode(a.toJson())).toList());
+    AppState.instance.notify();
   }
 
   static Future<void> deleteReminder(String id) async {
     final x = reminders()..removeWhere((a) => a.id == id);
     await _p.setStringList('reminders', x.map((a) => jsonEncode(a.toJson())).toList());
+    AppState.instance.notify();
   }
 
   static List<Reminder> remindersForEntity(String entityId) =>

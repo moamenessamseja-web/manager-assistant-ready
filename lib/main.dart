@@ -28,7 +28,10 @@ class ManagerApp extends StatelessWidget {
           debugShowCheckedModeBanner: false,
           title: 'مساعد الإدارة',
           theme: AppTheme.light(),
-          home: const Directionality(textDirection: TextDirection.rtl, child: MainShell()),
+          // ملحوظة مهمة: من غير const هنا، MainShell مش هيتبني تاني لما
+          // AppState يبعت إشعار — Flutter بيتجاهل إعادة بناء الـconst
+          // widgets تمامًا حتى لو الأب اتبنى من جديد.
+          home: Directionality(textDirection: TextDirection.rtl, child: MainShell()),
         ),
       );
 }
