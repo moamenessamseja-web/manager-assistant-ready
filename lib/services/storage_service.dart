@@ -7,6 +7,29 @@ import '../models/rule.dart';
 import '../models/reminder.dart';
 import 'app_state.dart';
 
+/// تطبيع النص العربي: إزالة التشكيل، توحيد الألفات، تاء مربوطة، ياء.
+/// يُستخدم لمطابقة الأسماء في assistant_controller.dart بدل المقارنة الخام
+/// التي تفشل عند اختلاف التشكيل أو نوع الألف.
+/// لا يحوّل الاسم الأصلي — يُستخدم فقط للمطابقة.
+String normalizeArabic(String value) {
+  return value
+      .trim()
+      // إزالة التشكيل العربي (حركات النص)
+      .replaceAll(RegExp(r'[ًٌٍَُِّْـ]'), '')
+      // توحيد الألف همزة (أ، إ، آ → ا)
+      .replaceAll('أ', 'ا')
+      .replaceAll('إ', 'ا')
+      .replaceAll('آ', 'ا')
+      // تاء مربوطة → هاء (محمدَه → محمده)
+      .replaceAll('ة', 'ه')
+      // ياء أكبر → ياء صغيرة (علىًى → علىي)
+      .replaceAll('ى', 'ي')
+      // مسافة خالية (Arabic Zero-Width Space)
+      .replaceAll('\u200b', '')
+      // نوعة فارسية محتملة
+      .replaceAll('ه', 'ه');
+}
+
 class StorageService {
   static late SharedPreferences _p;
 
@@ -40,23 +63,34 @@ class StorageService {
     AppState.instance.notify();
   }
 
+  /// البحث عن موظف بالاسم — يستخدم المطابقة الطبيعية لتجاوز اختلافات التشكيل.
   static Employee? findEmployee(String name) {
+    if (name.trim().isEmpty) return null;
+    final normalized = normalizeArabic(name);
     for (final e in employees()) {
-      if (e.name.contains(name) || name.contains(e.name)) return e;
+      final eNorm = normalizeArabic(e.name);
+      if (eNorm.contains(normalized) || normalized.contains(eNorm)) return e;
     }
     return null;
   }
 
   /// كل الموظفين اللي اسمهم يطابق الاسم المذكور — تُستخدم لاكتشاف الالتباس
   /// (أكتر من موظف بنفس الاسم) بدل تخمين الأول اللي يتطابق.
+  /// تستخدم المطابقة الطبيعية لتفادي فشل المطابقة بسبب التشكيل.
   static Future<void> deleteEmployee(String id) async {
     final x = employees()..removeWhere((e) => e.id == id);
     await _p.setStringList('employees', x.map((e) => jsonEncode(e.toJson())).toList());
     AppState.instance.notify();
   }
 
-  static List<Employee> employeesMatching(String name) =>
-      employees().where((e) => e.name.contains(name) || name.contains(e.name)).toList();
+  static List<Employee> employeesMatching(String name) {
+    if (name.trim().isEmpty) return [];
+    final normalized = normalizeArabic(name);
+    return employees().where((e) {
+      final eNorm = normalizeArabic(e.name);
+      return eNorm.contains(normalized) || normalized.contains(eNorm);
+    }).toList();
+  }
 
   // ---------------- Suppliers ----------------
   static List<Supplier> suppliers() => (_p.getStringList('suppliers') ?? [])
@@ -71,9 +105,13 @@ class StorageService {
     AppState.instance.notify();
   }
 
+  /// البحث عن مورد بالاسم — يستخدم المطابقة الطبيعية.
   static Supplier? findSupplier(String name) {
+    if (name.trim().isEmpty) return null;
+    final normalized = normalizeArabic(name);
     for (final s in suppliers()) {
-      if (s.name.contains(name) || name.contains(s.name)) return s;
+      final sNorm = normalizeArabic(s.name);
+      if (sNorm.contains(normalized) || normalized.contains(sNorm)) return s;
     }
     return null;
   }
@@ -84,8 +122,14 @@ class StorageService {
     AppState.instance.notify();
   }
 
-  static List<Supplier> suppliersMatching(String name) =>
-      suppliers().where((s) => s.name.contains(name) || name.contains(s.name)).toList();
+  static List<Supplier> suppliersMatching(String name) {
+    if (name.trim().isEmpty) return [];
+    final normalized = normalizeArabic(name);
+    return suppliers().where((s) {
+      final sNorm = normalizeArabic(s.name);
+      return sNorm.contains(normalized) || normalized.contains(sNorm);
+    }).toList();
+  }
 
   // ---------------- Rules ----------------
   static List<FollowUpRule> rules() => (_p.getStringList('rules') ?? [])
