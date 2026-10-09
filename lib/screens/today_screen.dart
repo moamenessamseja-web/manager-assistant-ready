@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import '../models/commitment.dart';
 import '../services/storage_service.dart';
 import '../services/reminder_service.dart';
+import '../services/app_state.dart';
 import '../design/tokens.dart';
 import '../design/widgets.dart';
 import 'notification_debug_screen.dart';
 
 /// اليوم — Operational dashboard: إيه اللي محتاج انتباه دلوقتي، مش مجرد تقرير.
+/// تستمع لـ AppState عشان تتحدث تلقائيًا عند أي تعديل من المحادثة أو شاشات تانية.
 class TodayScreen extends StatefulWidget {
   const TodayScreen({super.key});
   @override
@@ -16,77 +18,82 @@ class TodayScreen extends StatefulWidget {
 class _S extends State<TodayScreen> {
   @override
   Widget build(BuildContext context) {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final todayStr = today.toIso8601String().substring(0, 10);
-
-    final commitments = StorageService.commitments();
-    final overdue = commitments.where((x) => x.status == 'pending' && x.dueDate.isBefore(today)).toList();
-    final dueToday = commitments
-        .where((x) =>
-            x.status == 'pending' &&
-            x.dueDate.year == today.year &&
-            x.dueDate.month == today.month &&
-            x.dueDate.day == today.day)
-        .toList();
-    final upcoming = commitments.where((x) => x.status == 'pending' && x.dueDate.isAfter(today)).toList();
-
-    // تذكيرات فعلية فشلت في الوصول — مش مجرد عرض نظري؛ متصلة بمعمارية الـ
-    // Reminder الحقيقية (notification_service + reminder_service).
-    final brokenReminders = StorageService.reminders().where((r) => r.status != 'scheduled' && r.status != 'cancelled').toList();
-
-    // حالة العمل الحية: موردين وعاملين نشطين فقط (غير مؤرشفين).
-    final activeEmployees = StorageService.employees().where((e) => !e.archived).toList();
-    final absentToday = activeEmployees.where((e) => !e.attendance.contains(todayStr)).length;
-    final activeSuppliers = StorageService.suppliers().where((s) => !s.archived).toList();
-    final suppliersDue = activeSuppliers.fold<double>(0, (sum, s) => sum + s.balanceDue);
-    final customersOverdue = overdue.where((c) => c.type == 'debt_to_collect').fold<double>(0, (sum, c) => sum + (c.amount ?? 0));
-
-    final nothingPending = overdue.isEmpty && dueToday.isEmpty && upcoming.isEmpty;
-
     return Scaffold(
       appBar: AppBar(title: const Text('ماذا عليك اليوم؟')),
-      body: ListView(
-        padding: const EdgeInsets.symmetric(vertical: AppSpace.x2),
-        children: [
-          if (brokenReminders.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(AppSpace.x4, AppSpace.x2, AppSpace.x4, AppSpace.x2),
-              child: InkWell(
-                borderRadius: BorderRadius.circular(AppRadius.md),
-                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationDebugScreen())),
-                child: AppStatusBanner(
-                  message: '${brokenReminders.length} تذكير ما وصلش صح — افتح تشخيص الإشعارات',
-                  kind: AppStatusKind.warning,
-                ),
-              ),
-            ),
-          if (activeEmployees.isNotEmpty || activeSuppliers.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpace.x4),
-              child: Wrap(spacing: AppSpace.x2, runSpacing: AppSpace.x2, children: [
-                if (activeEmployees.isNotEmpty)
-                  AppBadge(
-                    '$absentToday من ${activeEmployees.length} لسه ما حضرش',
-                    kind: absentToday > 0 ? AppStatusKind.warning : AppStatusKind.success,
+      body: ListenableBuilder(
+        listenable: AppState.instance,
+        builder: (context, _) {
+          final now = DateTime.now();
+          final today = DateTime(now.year, now.month, now.day);
+          final todayStr = today.toIso8601String().substring(0, 10);
+
+          final commitments = StorageService.commitments();
+          final overdue = commitments.where((x) => x.status == 'pending' && x.dueDate.isBefore(today)).toList();
+          final dueToday = commitments
+              .where((x) =>
+                  x.status == 'pending' &&
+                  x.dueDate.year == today.year &&
+                  x.dueDate.month == today.month &&
+                  x.dueDate.day == today.day)
+              .toList();
+          final upcoming = commitments.where((x) => x.status == 'pending' && x.dueDate.isAfter(today)).toList();
+
+          // تذكيرات فعلية فشلت في الوصول — مش مجرد عرض نظري؛ متصلة بمعمارية الـ
+          // Reminder الحقيقية (notification_service + reminder_service).
+          final brokenReminders = StorageService.reminders().where((r) => r.status != 'scheduled' && r.status != 'cancelled').toList();
+
+          // حالة العمل الحية: موردين وعاملين نشطين فقط (غير مؤرشفين).
+          final activeEmployees = StorageService.employees().where((e) => !e.archived).toList();
+          final absentToday = activeEmployees.where((e) => !e.attendance.contains(todayStr)).length;
+          final activeSuppliers = StorageService.suppliers().where((s) => !s.archived).toList();
+          final suppliersDue = activeSuppliers.fold<double>(0, (sum, s) => sum + s.balanceDue);
+          final customersOverdue = overdue.where((c) => c.type == 'debt_to_collect').fold<double>(0, (sum, c) => sum + (c.amount ?? 0));
+
+          final nothingPending = overdue.isEmpty && dueToday.isEmpty && upcoming.isEmpty;
+
+          return ListView(
+            padding: const EdgeInsets.symmetric(vertical: AppSpace.x2),
+            children: [
+              if (brokenReminders.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(AppSpace.x4, AppSpace.x2, AppSpace.x4, AppSpace.x2),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(AppRadius.md),
+                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationDebugScreen())),
+                    child: AppStatusBanner(
+                      message: '${brokenReminders.length} تذكير ما وصلش صح — افتح تشخيص الإشعارات',
+                      kind: AppStatusKind.warning,
+                    ),
                   ),
-                if (customersOverdue > 0) AppBadge('${customersOverdue.toStringAsFixed(0)} ج متأخرة عند عملاء', kind: AppStatusKind.danger),
-                if (suppliersDue > 0) AppBadge('${suppliersDue.toStringAsFixed(0)} ج مستحق لموردين', kind: AppStatusKind.info),
-              ]),
-            ),
-          _section(context, '🔴 متأخر', overdue),
-          _section(context, '🟡 اليوم', dueToday),
-          _section(context, '🟢 قادم', upcoming),
-          if (nothingPending)
-            const Padding(
-              padding: EdgeInsets.only(top: AppSpace.x10),
-              child: AppEmptyState(
-                icon: Icons.event_available_outlined,
-                title: 'لا توجد التزامات بعد',
-                subtitle: 'ابدأ من الشات: "أحمد عليه 3500 هيدفع الخميس"',
-              ),
-            ),
-        ],
+                ),
+              if (activeEmployees.isNotEmpty || activeSuppliers.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: AppSpace.x4),
+                  child: Wrap(spacing: AppSpace.x2, runSpacing: AppSpace.x2, children: [
+                    if (activeEmployees.isNotEmpty)
+                      AppBadge(
+                        '$absentToday من ${activeEmployees.length} لسه ما حضرش',
+                        kind: absentToday > 0 ? AppStatusKind.warning : AppStatusKind.success,
+                      ),
+                    if (customersOverdue > 0) AppBadge('${customersOverdue.toStringAsFixed(0)} ج متأخرة عند عملاء', kind: AppStatusKind.danger),
+                    if (suppliersDue > 0) AppBadge('${suppliersDue.toStringAsFixed(0)} ج مستحق لموردين', kind: AppStatusKind.info),
+                  ]),
+                ),
+              _section(context, '🔴 متأخر', overdue),
+              _section(context, '🟡 اليوم', dueToday),
+              _section(context, '🟢 قادم', upcoming),
+              if (nothingPending)
+                const Padding(
+                  padding: EdgeInsets.only(top: AppSpace.x10),
+                  child: AppEmptyState(
+                    icon: Icons.event_available_outlined,
+                    title: 'لا توجد التزامات بعد',
+                    subtitle: 'ابدأ من الشات: "أحمد عليه 3500 هيدفع الخميس"',
+                  ),
+                ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -124,7 +131,6 @@ class _S extends State<TodayScreen> {
     for (final r in StorageService.remindersForEntity(x.id)) {
       await ReminderService.cancel(r.id);
     }
-    if (mounted) setState(() {});
   }
 
   Future<void> _postpone(Commitment x) async {
@@ -137,6 +143,5 @@ class _S extends State<TodayScreen> {
       r.dueAt = x.remindAt;
       await ReminderService.retry(r);
     }
-    if (mounted) setState(() {});
   }
 }

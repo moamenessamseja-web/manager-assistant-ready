@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import '../models/supplier.dart';
 import '../services/storage_service.dart';
+import '../services/app_state.dart';
 import '../design/tokens.dart';
 import '../design/widgets.dart';
 import 'supplier_details_screen.dart';
 
+/// قائمة الموردين — تستمع لـ AppState عشان تتحدث تلقائيًا.
+/// مش محتاجة إعادة فتح التطبيق عشان تشوف البيانات المحدّثة من المحادثة.
 class SuppliersScreen extends StatefulWidget {
   const SuppliersScreen({super.key});
   @override
@@ -16,13 +19,6 @@ class _S extends State<SuppliersScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final all = StorageService.suppliers();
-    final shown = switch (_filter) {
-      'archived' => all.where((s) => s.archived).toList(),
-      'all' => all,
-      _ => all.where((s) => !s.archived).toList(),
-    };
-
     return Scaffold(
       appBar: AppBar(title: const Text('الموردين')),
       body: Column(children: [
@@ -31,60 +27,71 @@ class _S extends State<SuppliersScreen> {
           child: Row(children: [
             ChoiceChip(label: const Text('نشط'), selected: _filter == 'active', onSelected: (_) => setState(() => _filter = 'active')),
             const SizedBox(width: 8),
-            ChoiceChip(label: const Text('مؤرشف'), selected: _filter == 'archived', onSelected: (_) => setState(() => _filter = 'archived')),
+            ChoiceChip(label: const Text('مؤرشف'), selected: _filter == 'archived', onSelected: (_) => setState(() => _filter == 'archived')),
             const SizedBox(width: 8),
             ChoiceChip(label: const Text('الكل'), selected: _filter == 'all', onSelected: (_) => setState(() => _filter = 'all')),
           ]),
         ),
         Expanded(
-          child: shown.isEmpty
-              ? const AppEmptyState(
+          child: ListenableBuilder(
+            listenable: AppState.instance,
+            builder: (context, _) {
+              final all = StorageService.suppliers();
+              final shown = switch (_filter) {
+                'archived' => all.where((s) => s.archived).toList(),
+                'all' => all,
+                _ => all.where((s) => !s.archived).toList(),
+              };
+              if (shown.isEmpty) {
+                return const AppEmptyState(
                   icon: Icons.local_shipping_outlined,
                   title: 'لا يوجد موردين هنا',
                   subtitle: 'مثال: "اعمل مورد بن اسمه محمود"\nأو من الشات: "محمود هيجيب 20 كيلو بن السبت"',
-                )
-              : ListView(
-                  children: shown.map((s) {
-                    final pending = s.pendingDeliveries;
-                    return Card(
-                      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      child: ListTile(
-                        leading: CircleAvatar(child: Text(s.name.isNotEmpty ? s.name[0] : '؟')),
-                        title: Text('${s.name}${s.itemType.isEmpty ? '' : ' — ${s.itemType}'}'),
-                        subtitle: Text(
-                          'المستحق عليك: ${s.balanceDue.toStringAsFixed(0)} ج'
-                          '${pending.isEmpty ? '' : '\nتوريد متوقع: ${pending.first.expectedDate.toString().substring(0, 10)}'}'
-                          '${s.archived ? '\nمؤرشف' : ''}',
-                        ),
-                        isThreeLine: pending.isNotEmpty || s.archived,
-                        trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                          if (!s.archived)
-                            Icon(s.balanceDue > 0 ? Icons.warning_amber_rounded : Icons.check_circle,
-                                color: s.balanceDue > 0 ? AppColors.warning : AppColors.success),
-                          PopupMenuButton<String>(
-                            onSelected: (v) async {
-                              if (v == 'edit') {
-                                _editDialog(s);
-                              } else if (v == 'archive') {
-                                s.archived = !s.archived;
-                                await StorageService.saveSupplier(s);
-                                setState(() {});
-                              }
-                            },
-                            itemBuilder: (_) => [
-                              const PopupMenuItem(value: 'edit', child: Text('تعديل')),
-                              PopupMenuItem(value: 'archive', child: Text(s.archived ? 'إلغاء الأرشفة' : 'أرشفة')),
-                            ],
-                          ),
-                        ]),
-                        onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (_) => SupplierDetailsScreen(supplier: s)),
-                        ).then((_) => setState(() {})),
+                );
+              }
+              return ListView(
+                children: shown.map((s) {
+                  final pending = s.pendingDeliveries;
+                  return Card(
+                    margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    child: ListTile(
+                      leading: CircleAvatar(child: Text(s.name.isNotEmpty ? s.name[0] : '؟')),
+                      title: Text('${s.name}${s.itemType.isEmpty ? '' : ' — ${s.itemType}'}'),
+                      subtitle: Text(
+                        'المستحق عليك: ${s.balanceDue.toStringAsFixed(0)} ج'
+                        '${pending.isEmpty ? '' : '\nتوريد متوقع: ${pending.first.expectedDate.toString().substring(0, 10)}'}'
+                        '${s.archived ? '\nمؤرشف' : ''}',
                       ),
-                    );
-                  }).toList(),
-                ),
+                      isThreeLine: pending.isNotEmpty || s.archived,
+                      trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                        if (!s.archived)
+                          Icon(s.balanceDue > 0 ? Icons.warning_amber_rounded : Icons.check_circle,
+                              color: s.balanceDue > 0 ? AppColors.warning : AppColors.success),
+                        PopupMenuButton<String>(
+                          onSelected: (v) async {
+                            if (v == 'edit') {
+                              _editDialog(s);
+                            } else if (v == 'archive') {
+                              s.archived = !s.archived;
+                              await StorageService.saveSupplier(s);
+                            }
+                          },
+                          itemBuilder: (_) => [
+                            const PopupMenuItem(value: 'edit', child: Text('تعديل')),
+                            PopupMenuItem(value: 'archive', child: Text(s.archived ? 'إلغاء الأرشفة' : 'أرشفة')),
+                          ],
+                        ),
+                      ]),
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => SupplierDetailsScreen(supplier: s)),
+                      ).then((_) => setState(() {})),
+                    ),
+                  );
+                }).toList(),
+              );
+            },
+          ),
         ),
       ]),
       floatingActionButton: FloatingActionButton(onPressed: _add, child: const Icon(Icons.local_shipping)),
@@ -114,10 +121,7 @@ class _S extends State<SuppliersScreen> {
                 itemType: item.text.trim(),
                 phone: phone.text.trim(),
               ));
-              if (mounted) {
-                Navigator.pop(context);
-                setState(() {});
-              }
+              if (mounted) Navigator.pop(context);
             },
             child: const Text('حفظ'),
           ),
@@ -147,10 +151,7 @@ class _S extends State<SuppliersScreen> {
               s.itemType = item.text.trim();
               s.phone = phone.text.trim();
               await StorageService.saveSupplier(s);
-              if (mounted) {
-                Navigator.pop(context);
-                setState(() {});
-              }
+              if (mounted) Navigator.pop(context);
             },
             child: const Text('حفظ'),
           ),

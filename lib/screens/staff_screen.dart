@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import '../models/employee.dart';
 import '../services/storage_service.dart';
+import '../services/app_state.dart';
 import '../design/widgets.dart';
 import 'employee_details_screen.dart';
 
+/// قائمة العاملين — تستمع لـ AppState عشان تتحدث تلقائيًا لما المحادثة تسجل حضور/سلفة.
+/// مش محتاجة تغلق وتفتح التطبيق عشان تشوف البيانات المحدّثة.
 class StaffScreen extends StatefulWidget {
   const StaffScreen({super.key});
   @override
@@ -15,13 +18,6 @@ class _S extends State<StaffScreen> {
 
   @override
   Widget build(BuildContext c) {
-    final all = StorageService.employees();
-    final shown = switch (_filter) {
-      'archived' => all.where((e) => e.archived).toList(),
-      'all' => all,
-      _ => all.where((e) => !e.archived).toList(),
-    };
-
     return Scaffold(
       appBar: AppBar(title: const Text('العاملين')),
       body: Column(children: [
@@ -36,37 +32,48 @@ class _S extends State<StaffScreen> {
           ]),
         ),
         Expanded(
-          child: shown.isEmpty
-              ? const AppEmptyState(
+          child: ListenableBuilder(
+            listenable: AppState.instance,
+            builder: (context, _) {
+              final all = StorageService.employees();
+              final shown = switch (_filter) {
+                'archived' => all.where((e) => e.archived).toList(),
+                'all' => all,
+                _ => all.where((e) => !e.archived).toList(),
+              };
+              if (shown.isEmpty) {
+                return const AppEmptyState(
                   icon: Icons.people_outline,
                   title: 'لا يوجد موظفون هنا',
                   subtitle: 'مثال: محمد بدأ شغل يوم 4 ومرتبه 4000',
-                )
-              : ListView(
-                  children: shown.map((e) => Card(
-                        child: ListTile(
-                          title: Text('${e.name} — ${e.role}'),
-                          subtitle: Text('حضور ${e.attendance.length} | سلف ${e.totalAdvances.toStringAsFixed(0)} ج | المتبقي ${e.remainingSalary.toStringAsFixed(0)} ج'),
-                          trailing: PopupMenuButton<String>(
-                            onSelected: (v) async {
-                              if (v == 'edit') {
-                                _editDialog(e);
-                              } else if (v == 'archive') {
-                                e.archived = !e.archived;
-                                await StorageService.saveEmployee(e);
-                                setState(() {});
-                              }
-                            },
-                            itemBuilder: (_) => [
-                              const PopupMenuItem(value: 'edit', child: Text('تعديل')),
-                              PopupMenuItem(value: 'archive', child: Text(e.archived ? 'إلغاء الأرشفة' : 'أرشفة')),
-                            ],
-                          ),
-                          onTap: () => Navigator.push(c, MaterialPageRoute(builder: (_) => EmployeeDetailsScreen(employee: e)))
-                              .then((_) => setState(() {})),
+                );
+              }
+              return ListView(
+                children: shown.map((e) => Card(
+                      child: ListTile(
+                        title: Text('${e.name} — ${e.role}'),
+                        subtitle: Text('حضور ${e.attendance.length} | سلف ${e.totalAdvances.toStringAsFixed(0)} ج | المتبقي ${e.remainingSalary.toStringAsFixed(0)} ج'),
+                        trailing: PopupMenuButton<String>(
+                          onSelected: (v) async {
+                            if (v == 'edit') {
+                              _editDialog(e);
+                            } else if (v == 'archive') {
+                              e.archived = !e.archived;
+                              await StorageService.saveEmployee(e);
+                            }
+                          },
+                          itemBuilder: (_) => [
+                            const PopupMenuItem(value: 'edit', child: Text('تعديل')),
+                            PopupMenuItem(value: 'archive', child: Text(e.archived ? 'إلغاء الأرشفة' : 'أرشفة')),
+                          ],
                         ),
-                      )).toList(),
-                ),
+                        onTap: () => Navigator.push(c, MaterialPageRoute(builder: (_) => EmployeeDetailsScreen(employee: e)))
+                            .then((_) => setState(() {})),
+                      ),
+                    )).toList(),
+              );
+            },
+          ),
         ),
       ]),
       floatingActionButton: FloatingActionButton(onPressed: _add, child: const Icon(Icons.person_add)),
@@ -95,10 +102,7 @@ class _S extends State<StaffScreen> {
                 startDate: DateTime.now(),
                 salaryMonthly: double.tryParse(s.text) ?? 0,
               ));
-              if (mounted) {
-                Navigator.pop(context);
-                setState(() {});
-              }
+              if (mounted) Navigator.pop(context);
             },
             child: const Text('حفظ'),
           ),
@@ -126,10 +130,7 @@ class _S extends State<StaffScreen> {
               e.role = r.text.trim();
               e.salaryMonthly = double.tryParse(s.text) ?? e.salaryMonthly;
               await StorageService.saveEmployee(e);
-              if (mounted) {
-                Navigator.pop(context);
-                setState(() {});
-              }
+              if (mounted) Navigator.pop(context);
             },
             child: const Text('حفظ'),
           ),
