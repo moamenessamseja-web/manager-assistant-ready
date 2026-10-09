@@ -4,78 +4,104 @@
 Agent: Mavis (root session)
 Started: 2026-10-09
 Repository: moamenessamseja-web/manager-assistant-ready
-Baseline commit: 7325737 (main)
-
-## Baseline Build Status
-- Build #20: GREEN (commit 6e32717)
-- Build #24: User reported success (source at 7325737)
-- Local build: NOT AVAILABLE (sandbox network/proxy limitations)
-- All work pushed to GitHub and built via GitHub Actions
+Baseline commit: 7325737 (external — prior agent session)
 
 ## Execution Contract
 See: masaad_el_edara_master_implementation_brief_v2.md
 See: to agent.md (Build 24 priority list)
 
-## Last Completed Phases
-- PHASE 0 (audit): PENDING (in this session)
-- PRIORITY A (notification): PENDING
-- PRIORITY B (entity resolution): PENDING
-- PRIORITY C (live state): PENDING
-- PRIORITY D (weekly brief): PENDING
-- PRIORITY E (memory screen): PENDING
+---
 
-## Current Phase
-PHASE 0 — Architecture Audit + State Setup
+## Commits Pushed in This Session (oldest → newest)
 
-## Next Phase
-PRIORITY A — Notification scheduling fix (R8/ProGuard / Missing type parameter)
+| # | SHA | Description |
+|---|-----|-------------|
+| 1 | 6261ab7 | chore: add architecture audit and implementation state |
+| 2 | 207cbaa | fix: add ProGuard rules for flutter_local_notifications Gson serialization (fix schedule_failed) |
+| 3 | 1348252 | fix: add Arabic normalization to entity matching (fixes assistant asking for name when name given) |
+| 4 | fbd38fd | fix: add ListenableBuilder to StaffScreen, SuppliersScreen, TodayScreen, BriefScreen (fix live state propagation) |
+| 5 | 8e669cf | feat: rebuild memory as business overview with live stats, activity timeline, and interactive search |
+| 6 | NEXT | (pending) final state update + trigger CI |
+
+---
+
+## Issues Fixed
+
+### ✅ Priority A — Notification scheduling (schedule_failed / Missing type parameter)
+- **Root cause**: R8 stripping Gson generic type metadata used by flutter_local_notifications for persisting scheduled notifications
+- **Fix**: Added `proguard-rules.pro` with keep rules for `com.dexterous.flutterlocalnotifications.**` and `com.google.gson.**`; enabled explicit `minifyEnabled = true, shrinkResources = true` in release buildType
+- **Commit**: 207cbaa
+- **Verification needed**: Physical device test after installing APK from CI
+
+### ✅ Priority B — Arabic employee entity resolution
+- **Root cause**: `employeesMatching()` / `suppliersMatching()` used raw substring match without Arabic normalization — diacritics (تشكيل), alef variants (أ/إ/آ), taa marbuta (ة), yaa (ى) caused false negatives
+- **Fix**: Added `normalizeArabic()` in `StorageService`; updated all matching functions; also fixed bug in `deleteSupplier()` where `s.id == s.id` was always true (would delete all suppliers)
+- **Commit**: 1348252
+- **Verification needed**: Test "سجل حضور محمد" with various spelling variants
+
+### ✅ Priority C — Live state propagation
+- **Root cause**: `StaffScreen`, `SuppliersScreen`, `TodayScreen`, `BriefScreen` used `setState()` only — no listener for `AppState` changes from Chat
+- **Fix**: Wrapped all ListView/ListenableBuilder content with `ListenableBuilder(listenable: AppState.instance, builder: ...)` so screens rebuild automatically when any `StorageService.saveXxx()` is called from any screen
+- **Commit**: fbd38fd
+- **Verification**: Record attendance from Chat → check StaffScreen updates without restart
+
+### ✅ Priority D — Weekly Brief actionable
+- **Root cause**: Numbers displayed but not interactive
+- **Fix**: Added `_StatCard` with `onTap`; absent employees → dialog; debt_to_collect → dialog; employee/supplier sections → navigate to StaffScreen/SuppliersScreen; BriefScreen also now listens to AppState
+- **Commit**: fbd38fd (bundled with Priority C)
+- **Verification**: Tap "سلف العاملين" → should navigate to StaffScreen
+
+### ✅ Priority E — Memory as business overview
+- **Root cause**: Only search was functional; empty state showed no content
+- **Fix**: Added business overview with active employee/supplier counts, advances summary, overdue reminders, recent activity timeline (from commitments/advances/attendance/payments/reminders); interactive search results with navigation; `ListenableBuilder` for live updates
+- **Commit**: 8e669cf
+- **Verification**: Open Memory with no search → should show stats + activity timeline
+
+---
 
 ## Last Successful Commit
-7325737 (external — not from this agent)
+8e669cf892d1f2d1922ea711bca927953440bc46
 
 ## Last Successful Build
-Build #20 (commit 6e32717) via GitHub Actions
-Build #24: User-reported success (source 7325737)
+Build #24 (user-reported, source 7325737)
+Next expected: build-25 (CI running from commit 8e669cf)
 
 ## Current Known Issues
-1. schedule_failed / "Missing type parameter" — appears in release builds; suspected R8/ProGuard stripping Gson generic type metadata used by flutter_local_notifications for scheduled notification persistence
-2. Arabic entity resolution — employeesMatching/suppliersMatching use raw substring; diacritics/variants cause false negatives (assistant asks for name when name was given)
-3. StaffScreen stale after Chat mutations — setState() used locally, doesn't react to AppState changes
-4. Weekly Brief — static display only, numbers not interactive
-5. Memory screen — search-only, no business overview when query empty
-
-## Blocked Items
-None yet.
-
-## Files Changed
-None yet (pre-commit state).
+- Physical device tests still required for: notification delivery after reboot, attendance record via Chat, Brief navigation
+- No local build performed (sandbox network limitations)
 
 ## Database Migration Status
 Unchanged — additive JSON in SharedPreferences; no migrations needed.
 
 ## AI Pipeline Status
-Working — Gemini Flash-Lite structured output confirmed.
-Entity resolution needs Arabic normalization fix.
+Working — Arabic normalization improves entity resolution. Gemini Flash-Lite structured output confirmed.
+No changes to prompt or GeminiService in this session.
 
 ## Reminder Pipeline Status
-Reminder entity exists, decoupled from Commitment.
-Boot receiver registered via CI (build-20).
-schedule_failed persists in release — suspected R8 issue.
+Reminder entity independent of Commitment.
+Boot receiver registered via CI workflow (build-20, confirmed).
+ProGuard rules added to protect Gson serialization path.
 
 ## Notification Status
-Core scheduling: works in debug-like environments.
-Release build: schedule_failed / "Missing type parameter" — suspected R8/ProGuard.
+ProGuard rules protect flutter_local_notifications Gson serialization.
+R8 minification now explicitly enabled in release build.
+Physical device verification needed post-build.
 
 ## APK/Artifact Status
-Build #24: User manually downloaded from GitHub Releases (build-24 tag).
-Artifact location: GitHub Release tag build-24.
+Artifact expected: GitHub Release tag build-25
+Previous: build-24 (user downloaded manually)
 
 ## Recovery Instructions
-1. Read .agent/ARCHITECTURE_AUDIT.md
-2. Read .agent/IMPLEMENTATION_STATE.md
-3. Run: curl -H "Authorization: token $GITHUB_TOKEN" https://api.github.com/repos/moamenessamseja-web/manager-assistant-ready/git/refs/heads/main
-4. Verify commit SHA matches expected baseline
-5. Apply fixes in order: Priority A → B → C → D → E
-6. Push each fix as separate commit to main
-7. Monitor GitHub Actions for build success
-8. Tag release with build number
+Current HEAD: 8e669cf892d1f2d1922ea711bca927953440bc46
+
+To recover after context loss:
+1. Read this file (IMPLEMENTATION_STATE.md)
+2. Check current HEAD: `curl -H "Authorization: token $GITHUB_TOKEN" https://api.github.com/repos/moamenessamseja-web/manager-assistant-ready/git/refs/heads/main`
+3. If behind, fast-forward: `git fetch origin && git reset --hard 8e669cf`
+4. Trigger CI if needed: `gh run list --repo moamenessamseja-web/manager-assistant-ready`
+5. Check latest run status
+
+## Next Action
+Monitor GitHub Actions for build-25 completion.
+If build fails: inspect run logs for specific error.
+If build succeeds: download APK from GitHub Release build-25, test on physical device.
