@@ -70,14 +70,41 @@ jobs:
           echo "---- AndroidManifest.xml after boot-receiver injection ----"
           cat "$MANIFEST"
 
-      - name: Enable core library desugaring (required by flutter_local_notifications)
+      - name: Add ProGuard rules for flutter_local_notifications and Gson
         run: |
+          cat > android/app/proguard-rules.pro << 'PROGUARD_EOF'
+          # Keep flutter_local_notifications classes intact.
+          # The plugin uses Gson for serializing scheduled notification payloads.
+          # Without these rules, R8 strips Gson generic type metadata (TypeToken, etc.),
+          # causing "Missing type parameter" / ClassCastException at runtime when
+          # flutter_local_notifications tries to deserialize persisted notifications.
+          -keep class com.dexterous.flutterlocalnotifications.** { *; }
+          -keep class com.google.gson.** { *; }
+          -keepattributes Signature
+          -keepattributes *Annotation*
+          # Also needed for the underlying AlarmManager/notification serialization.
+          -dontwarn com.google.gson.**
+          PROGUARD_EOF
+          echo "---- proguard-rules.pro created ----"
+          cat android/app/proguard-rules.pro
+
+      - name: Enable core library desugaring + R8 minification with ProGuard rules
+        run: |
+          # Flutter generates build.gradle (Groovy) by default when the android/ folder
+          # is fresh from flutter create. We append to it.
           if [ -f "android/app/build.gradle.kts" ]; then
             cat >> android/app/build.gradle.kts << 'GRADLE_EOF'
 
           android {
               compileOptions {
                   isCoreLibraryDesugaringEnabled = true
+              }
+              buildTypes {
+                  release {
+                      isMinifyEnabled = true
+                      isShrinkResources = true
+                      proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+                  }
               }
           }
 
@@ -92,6 +119,13 @@ jobs:
               compileOptions {
                   coreLibraryDesugaringEnabled true
               }
+              buildTypes {
+                  release {
+                      minifyEnabled true
+                      shrinkResources true
+                      proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+                  }
+              }
           }
 
           dependencies {
@@ -99,6 +133,8 @@ jobs:
           }
           GRADLE_EOF
           fi
+          echo "---- build.gradle after update ----"
+          cat android/app/build.gradle || cat android/app/build.gradle.kts
 
       - run: flutter pub get
 
