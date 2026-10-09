@@ -1,51 +1,81 @@
 # Implementation State
 
-## Task 3 — True Android BOOT_COMPLETED / reboot resilience: RESOLVED
+## Session Info
+Agent: Mavis (root session)
+Started: 2026-10-09
+Repository: moamenessamseja-web/manager-assistant-ready
+Baseline commit: 7325737 (main)
 
-code commit: 6e32717 ("fix: harden reminder rescheduling across reboot")
-Build #20: GREEN on GitHub Actions. APK: https://github.com/moamenessamseja-web/manager-assistant-ready/releases/tag/build-20
+## Baseline Build Status
+- Build #20: GREEN (commit 6e32717)
+- Build #24: User reported success (source at 7325737)
+- Local build: NOT AVAILABLE (sandbox network/proxy limitations)
+- All work pushed to GitHub and built via GitHub Actions
 
-### What changed
-Only `.github/workflows/build-apk.yml` — no Dart files, no new pubspec dependency, no custom native source files.
+## Execution Contract
+See: masaad_el_edara_master_implementation_brief_v2.md
+See: to agent.md (Build 24 priority list)
 
-1. Added `android.permission.RECEIVE_BOOT_COMPLETED` to the existing, already-proven `<manifest>`-level permission injection loop (same mechanism used since Phase 1 for RECORD_AUDIO/POST_NOTIFICATIONS/INTERNET — no new injection mechanism invented).
-2. Added a new CI step "Register flutter_local_notifications boot receiver" that injects two `<receiver>` elements as children of `<application>`:
-   - `com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver`
-   - `com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver` (intent-filter: BOOT_COMPLETED, MY_PACKAGE_REPLACED, QUICKBOOT_POWERON)
+## Last Completed Phases
+- PHASE 0 (audit): PENDING (in this session)
+- PRIORITY A (notification): PENDING
+- PRIORITY B (entity resolution): PENDING
+- PRIORITY C (live state): PENDING
+- PRIORITY D (weekly brief): PENDING
+- PRIORITY E (memory screen): PENDING
 
-### Why this is a genuine native boot mechanism, not app-launch rescheduling
-`flutter_local_notifications` (already a pubspec dependency, no new package added) ships these two receiver classes inside its own Android library. `ScheduledNotificationBootReceiver` is a real `BroadcastReceiver` registered for `android.intent.action.BOOT_COMPLETED` at the OS level. On boot, Android itself invokes it — no app process, no Dart/Flutter engine, no app having been opened. It re-arms the plugin's own natively-persisted pending notification requests (persisted by the plugin itself, natively, when `zonedSchedule` was originally called from Dart) directly through `AlarmManager`. This does not require headless Dart execution and therefore does not introduce a second/parallel scheduling architecture — it reuses the exact same underlying plugin that `NotificationService.scheduleAt` already calls.
+## Current Phase
+PHASE 0 — Architecture Audit + State Setup
 
-### Why this survives CI regenerating android/ every build
-`android/` is not committed to this repo; it is generated fresh by `flutter create` in CI on every run (established fact, unchanged). The fix is therefore in the CI workflow itself (the one piece of this project that IS persistent and version-controlled), using the exact same injection pattern already proven stable across builds 9–20 for permissions and Gradle desugaring: idempotent `grep -q` guard + `sed -i` insertion anchored on a literal line verified against Flutter's actual current AndroidManifest.xml.tmpl source (fetched directly from `github.com/flutter/flutter` to confirm exact structure before writing the sed anchor — not guessed).
+## Next Phase
+PRIORITY A — Notification scheduling fix (R8/ProGuard / Missing type parameter)
 
-### Idempotency
-Guarded by `grep -q "ScheduledNotificationBootReceiver" "$MANIFEST"` before inserting — re-running the step (e.g. workflow re-run) does not duplicate the receiver block. The receivers themselves only re-arm the plugin's own already-persisted pending requests on boot; they do not create new Reminder entities, so no duplicate reminders are produced.
+## Last Successful Commit
+7325737 (external — not from this agent)
 
-### Verification actually performed
-- Fetched the real, current `AndroidManifest.xml.tmpl` from `flutter/flutter` on GitHub (not assumed) to confirm `<manifest>` is single-line (existing anchor still valid) and `<application ...>` is multi-line, closing at the literal line `android:icon="@mipmap/ic_launcher">` — used that exact line as the receiver-insertion anchor.
-- Ran the exact sed commands used in the workflow locally against that real fetched template and confirmed the result is well-formed XML (`xml.dom.minidom` parse succeeded) with `<uses-permission>` correctly placed as a child of `<manifest>` and both `<receiver>` elements correctly placed as children of `<application>`.
-- Tested idempotency locally: running the injection twice does not duplicate the receiver block.
-- Pushed to CI: build #20 completed with conclusion `success` (GitHub Actions). A malformed manifest (wrong XML nesting, broken syntax) would have failed `flutter build apk` at the manifest-merge/aapt2 step, so this is corroborating evidence the real CI-generated manifest was valid.
-- **Not performed / not possible in this environment:** could not fetch the raw CI job log text directly (GitHub Actions log storage redirects to an Azure Blob Storage domain not reachable from this sandbox's network allowlist, and the sandbox's web_fetch tool only permits URLs sourced from a prior search/fetch, not from a bash/curl result) — so the exact printed CI-generated manifest was not visually re-inspected line-by-line; local verification used the identical real upstream template fetched directly from GitHub as a substitute.
-- **Physical reboot verification unavailable in this environment.** No Android device or emulator exists in this sandbox to actually reboot and observe notification delivery. This was NOT verified end-to-end on a real device. The user (product owner) is the only one who can perform that physical test on the next APK they install.
+## Last Successful Build
+Build #20 (commit 6e32717) via GitHub Actions
+Build #24: User-reported success (source 7325737)
 
-### Known limitation
-This resolves the *mechanism* (a genuine, OS-level, native boot receiver bundled in the already-used plugin, correctly registered via a CI path proven durable across regeneration). It has not been physically device-tested through an actual reboot cycle. `ReminderService.rescheduleAllActive()` (added in the prior task, called on app launch) remains in place as an additional defense-in-depth safety net and was not removed.
+## Current Known Issues
+1. schedule_failed / "Missing type parameter" — appears in release builds; suspected R8/ProGuard stripping Gson generic type metadata used by flutter_local_notifications for scheduled notification persistence
+2. Arabic entity resolution — employeesMatching/suppliersMatching use raw substring; diacritics/variants cause false negatives (assistant asks for name when name was given)
+3. StaffScreen stale after Chat mutations — setState() used locally, doesn't react to AppState changes
+4. Weekly Brief — static display only, numbers not interactive
+5. Memory screen — search-only, no business overview when query empty
 
-## Task 1 — Weekly Brief archived handling: RESOLVED (unchanged from prior checkpoint — not touched in this task)
-## Task 2 — Memory archived indication: RESOLVED (unchanged from prior checkpoint — not touched in this task)
+## Blocked Items
+None yet.
 
-## Notification issue reported by product owner
-**OPEN / DEFERRED.** Not investigated, not touched in this task, per explicit instruction.
+## Files Changed
+None yet (pre-commit state).
 
-Last successful commit: 6e32717 (build-20 APK)
-Last successful build: run 20
-Current known issues: none blocking. Physical reboot behavior not yet confirmed by the product owner on a real device.
-Database migration status: unchanged.
-AI pipeline status: unchanged — NOT modified.
-Reminder pipeline status: unchanged Dart architecture; the only addition is the native boot receiver registration at the CI/Android-manifest level, which reuses the existing flutter_local_notifications scheduling path with zero Dart-side changes.
-Notification status: core scheduling logic unchanged — NOT modified; the reported notification issue remains open/deferred.
-Recovery instructions: git log; fix CI errors from the run log (debug-N release)
+## Database Migration Status
+Unchanged — additive JSON in SharedPreferences; no migrations needed.
 
-Next action: WAIT FOR ARCHITECT'S NEXT COMMAND.
+## AI Pipeline Status
+Working — Gemini Flash-Lite structured output confirmed.
+Entity resolution needs Arabic normalization fix.
+
+## Reminder Pipeline Status
+Reminder entity exists, decoupled from Commitment.
+Boot receiver registered via CI (build-20).
+schedule_failed persists in release — suspected R8 issue.
+
+## Notification Status
+Core scheduling: works in debug-like environments.
+Release build: schedule_failed / "Missing type parameter" — suspected R8/ProGuard.
+
+## APK/Artifact Status
+Build #24: User manually downloaded from GitHub Releases (build-24 tag).
+Artifact location: GitHub Release tag build-24.
+
+## Recovery Instructions
+1. Read .agent/ARCHITECTURE_AUDIT.md
+2. Read .agent/IMPLEMENTATION_STATE.md
+3. Run: curl -H "Authorization: token $GITHUB_TOKEN" https://api.github.com/repos/moamenessamseja-web/manager-assistant-ready/git/refs/heads/main
+4. Verify commit SHA matches expected baseline
+5. Apply fixes in order: Priority A → B → C → D → E
+6. Push each fix as separate commit to main
+7. Monitor GitHub Actions for build success
+8. Tag release with build number
