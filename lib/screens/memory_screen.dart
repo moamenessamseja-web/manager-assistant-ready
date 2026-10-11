@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/storage_service.dart';
 import '../services/app_state.dart';
 import '../design/tokens.dart';
+import '../design/app_theme.dart';
 import '../design/widgets.dart';
 import 'staff_screen.dart';
 import 'suppliers_screen.dart';
@@ -160,7 +161,7 @@ class _MemoryScreenState extends State<MemoryScreen> {
         // Activity timeline
         if (activities.isNotEmpty) ...[
           const SizedBox(height: AppSpace.x6),
-          const AppSectionHeader('النشاط الأخير'),
+          const AppSectionHeader(title: 'النشاط الأخير'),
           ...activities.take(15).map((a) => _ActivityTile(activity: a)),
         ] else ...[
           const SizedBox(height: AppSpace.x8),
@@ -203,7 +204,7 @@ class _MemoryScreenState extends State<MemoryScreen> {
       children: [
         if (employees.isNotEmpty) ...[
           AppSectionHeader(
-            'العاملين (${employees.length})',
+            title: 'العاملين (${employees.length})',
             trailing: TextButton(
               onPressed: () => _navigateTo(context, const StaffScreen()),
               child: const Text('عرض الكل'),
@@ -222,7 +223,7 @@ class _MemoryScreenState extends State<MemoryScreen> {
         ],
         if (suppliers.isNotEmpty) ...[
           AppSectionHeader(
-            'الموردين (${suppliers.length})',
+            title: 'الموردين (${suppliers.length})',
             trailing: TextButton(
               onPressed: () => _navigateTo(context, const SuppliersScreen()),
               child: const Text('عرض الكل'),
@@ -240,7 +241,7 @@ class _MemoryScreenState extends State<MemoryScreen> {
               )),
         ],
         if (commitments.isNotEmpty) ...[
-          AppSectionHeader('الالتزامات (${commitments.length})'),
+          AppSectionHeader(title: 'الالتزامات (${commitments.length})'),
           ...commitments.map((c) => ListTile(
                 leading: Icon(
                   c.status == 'done' ? Icons.check_circle : Icons.schedule,
