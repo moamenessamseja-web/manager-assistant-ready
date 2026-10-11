@@ -300,7 +300,6 @@ class _SupplierReportScreenState extends State<SupplierReportScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
       appBar: AppBar(title: Text('$_title — ${widget.supplier.name}')),
       body: ListenableBuilder(
         listenable: AppState.instance,

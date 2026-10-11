@@ -13,6 +13,7 @@ import '../design/widgets.dart';
 import '../design/app_theme.dart';
 import '../services/app_state.dart';
 import '../services/storage_service.dart';
+import '../design/strings.dart';
 
 /// Premium Main Shell — 6-tab bottom navigation
 /// يستمع لـ AppState عشان يبني كل الشاشات من جديد بأحدث بيانات
@@ -43,18 +44,20 @@ class _MainShellState extends State<MainShell> {
     if (mounted) setState(() {});
   }
 
-  // Tab destinations — 6 screens
-  static const _destinations = [
-    ('القائمة', Icons.today_outlined, Icons.today, Icons.today),
-    ('المحادثة', Icons.chat_bubble_outline, Icons.chat_bubble, Icons.chat_bubble),
-    ('الذاكرة', Icons.psychology_outlined, Icons.psychology, Icons.psychology),
-    ('بريف', Icons.summarize_outlined, Icons.summarize, Icons.summarize),
-    ('الموظفين', Icons.people_outline, Icons.people, Icons.people),
-    ('الموردين', Icons.local_shipping_outlined, Icons.local_shipping, Icons.local_shipping),
-  ];
+  // Tab destinations — 6 screens (تُترجم حسب اللغة المختارة §6)
+  List<(String, IconData, IconData, IconData)> get _destinations => [
+        (L.t('nav_today'), Icons.today_outlined, Icons.today, Icons.today),
+        (L.t('nav_chat'), Icons.chat_bubble_outline, Icons.chat_bubble, Icons.chat_bubble),
+        (L.t('nav_memory'), Icons.psychology_outlined, Icons.psychology, Icons.psychology),
+        (L.t('nav_brief'), Icons.summarize_outlined, Icons.summarize, Icons.summarize),
+        (L.t('nav_staff'), Icons.people_outline, Icons.people, Icons.people),
+        (L.t('nav_suppliers'), Icons.local_shipping_outlined, Icons.local_shipping,
+            Icons.local_shipping),
+      ];
 
   // Secondary screens (from drawer)
-  static const _secondaryTitles = ['القواعد والتنبيهات', 'بريف الأسبوع', 'الإعدادات'];
+  List<String> get _secondaryTitles =>
+      [L.t('sec_rules'), L.t('sec_brief'), L.t('sec_settings')];
   static const _secondaryIcons = [Icons.rule, Icons.insights, Icons.settings];
 
   @override
@@ -69,7 +72,6 @@ class _MainShellState extends State<MainShell> {
     ];
 
     return Scaffold(
-      backgroundColor: AppColors.background,
       appBar: _buildAppBar(),
       drawer: _buildDrawer(),
       body: IndexedStack(

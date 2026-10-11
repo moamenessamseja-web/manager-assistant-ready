@@ -309,9 +309,10 @@ class AppCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final card = Container(
       decoration: BoxDecoration(
-        color: backgroundColor ?? AppColors.surface,
+        // يتبع الثيم (فاتح/داكن) بدل لون ثابت.
+        color: backgroundColor ?? Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(AppRadius.lg),
-        border: Border.all(color: AppColors.border, width: 1),
+        border: Border.all(color: Theme.of(context).colorScheme.outline, width: 1),
         boxShadow: elevated ? AppShadow.raised : AppShadow.flat,
       ),
       padding: padding ?? const EdgeInsets.all(AppSpace.x4),
@@ -356,7 +357,7 @@ class AppListTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: backgroundColor ?? AppColors.surface,
+      color: backgroundColor ?? Theme.of(context).colorScheme.surface,
       child: InkWell(
         onTap: onTap,
         child: Container(
@@ -485,7 +486,7 @@ class AppQuickAction extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = color ?? AppColors.primary;
     return Material(
-      color: AppColors.surface,
+      color: Theme.of(context).colorScheme.surface,
       borderRadius: BorderRadius.circular(AppRadius.lg),
       child: InkWell(
         onTap: onTap,
@@ -542,9 +543,9 @@ Future<T?> showAppBottomSheet<T>({
     enableDrag: enableDrag,
     backgroundColor: Colors.transparent,
     builder: (context) => Container(
-      decoration: const BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.vertical(
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: const BorderRadius.vertical(
           top: Radius.circular(AppRadius.xl),
         ),
         boxShadow: AppShadow.floating,

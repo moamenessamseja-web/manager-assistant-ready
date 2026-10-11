@@ -34,7 +34,14 @@ class GeminiService {
 - other: أي حاجة مش واضحة
 
 الحقول المطلوبة حسب النية:
-person: اسم العميل/المورد/الموظف
+person: اسم العميل/المورد/الموظف (لو واحد بس)
+people: مصفوفة أسماء **كل** الأشخاص المذكورين في الأمر لما يكونوا أكتر من واحد.
+  - استخدمها مع: mark_attendance / add_advance / add_supplier_payment / record_purchase / add_employee / create_commitment
+  - لو الأمر يخص شخص واحد، سيب people فاضية واستخدم person.
+  - لا تكرّر نفس الاسم، ولا تخترع أسماء غير مذكورة.
+  - أمثلة: "سجل حضور محمود وعلي وحسن" → people=[محمود, علي, حسن]
+            "دفعت لمحمود 500 ولحسن 300" → people=[محمود, حسن] مع amount=500 لكل واحد (لو المبالغ مختلفة، افصلهم في amount لكل اسم لو ذُكر صراحة)
+            "سلموني بن من محمود ومحمد بـ2000" → people=[محمود, محمد]
 type: لـ create_commitment فقط: debt_to_collect/debt_to_pay/task/rent/booking
 amount: رقم فقط بدون وحدة
 due_date: YYYY-MM-DD
@@ -57,6 +64,14 @@ supplier_phone: رقم تليفون لو ذُكر
  - "دفعت لمحمود 500" → intent=add_supplier_payment، amount=500.
  - لو الصياغة ملتبسة فعلًا بين بضاعة ودفعة، ارجع intent=other ولا تخمّن.
  - لا تخترع سعر وحدة غير مذكور.
+
+قاعدة المبالغ (مهمة جدًا): أي رقم مالي يذكره المستخدم **لازم** يتحط في amount، ومتسيبهوش فاضي أبدًا:
+ - توريد أو بضاعة بقيمة → amount = إجمالي قيمة البضاعة
+ - دفعة نقدية لمورد → amount = المبلغ المدفوع
+ - سلفة / خصم / مكافأة لموظف → amount
+ - دين أو التزام على عميل → amount = مبلغ الدين
+ مثال: "سلمني بن من محمود 20 كيلو بـ2000" → intent=record_purchase، purchase_quantity=20، purchase_unit=كيلو، amount=2000
+ مثال: "دفعت لمحمود 500" → intent=add_supplier_payment، amount=500
 rule_text: نص القاعدة كاملاً
 rule_frequency: monthly/weekly/daily
 rule_anchor: رقم يوم الشهر (1-31) لو شهرية، أو رقم يوم الأسبوع (1=إثنين..7=أحد) لو أسبوعية
@@ -108,6 +123,10 @@ text_original: نص المستخدم كما هو
             'rule_frequency': {'type': 'STRING'},
             'rule_anchor': {'type': 'NUMBER', 'nullable': true},
             'query_type': {'type': 'STRING'},
+            'people': {
+              'type': 'ARRAY',
+              'items': {'type': 'STRING'},
+            },
             'text_original': {'type': 'STRING'},
           },
           'required': ['intent', 'text_original']

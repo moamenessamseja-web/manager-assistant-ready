@@ -4,6 +4,7 @@ import '../services/app_state.dart';
 import '../design/tokens.dart';
 import '../design/app_theme.dart';
 import '../design/widgets.dart';
+import '../design/format.dart';
 import 'staff_screen.dart';
 import 'suppliers_screen.dart';
 
@@ -20,7 +21,6 @@ class _BriefScreenState extends State<BriefScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
       appBar: AppBar(title: const Text('بريف الأسبوع')),
       body: ListenableBuilder(
         listenable: AppState.instance,
@@ -246,7 +246,7 @@ class _BriefScreenState extends State<BriefScreen> {
                 .map<Widget>((c) => ListTile(
                       title: Text(
                           '${c.person}${c.amount == null ? '' : ' - ${(c.amount as double).toStringAsFixed(0)} ج'}'),
-                      subtitle: Text('منذ ${c.dueDate.toString().substring(0, 10)}'),
+                      subtitle: Text('منذ ${arabicDate(c.dueDate)}'),
                       leading: const Icon(Icons.person_outline),
                     ))
                 .toList(),

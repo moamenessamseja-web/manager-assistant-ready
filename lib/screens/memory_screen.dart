@@ -4,6 +4,7 @@ import '../services/app_state.dart';
 import '../design/tokens.dart';
 import '../design/app_theme.dart';
 import '../design/widgets.dart';
+import '../design/format.dart';
 import 'staff_screen.dart';
 import 'suppliers_screen.dart';
 
@@ -30,7 +31,6 @@ class _MemoryScreenState extends State<MemoryScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
       appBar: AppBar(title: const Text('الذاكرة')),
       body: Column(
         children: [
@@ -250,7 +250,7 @@ class _MemoryScreenState extends State<MemoryScreen> {
                 title: Text(
                     '${c.person}${c.amount == null ? '' : ' - ${c.amount!.toStringAsFixed(0)} ج'}'),
                 subtitle: Text(
-                    '${c.textOriginal}\n${c.dueDate.toString().substring(0, 10)} — ${c.status == 'done' ? 'تم' : 'قائمة'}'),
+                    '${c.textOriginal}\n${arabicDate(c.dueDate)} — ${c.status == 'done' ? 'تم' : 'قائمة'}'),
                 isThreeLine: true,
               )),
         ],

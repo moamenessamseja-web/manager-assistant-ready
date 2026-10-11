@@ -6,6 +6,7 @@ import '../services/app_state.dart';
 import '../design/tokens.dart';
 import '../design/app_theme.dart';
 import '../design/widgets.dart';
+import '../design/format.dart';
 import 'notification_debug_screen.dart';
 
 /// اليوم — Premium Operational Dashboard
@@ -27,7 +28,6 @@ class _S extends State<TodayScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
       body: ListenableBuilder(
         listenable: AppState.instance,
         builder: (context, _) => _buildBody(context),
@@ -640,7 +640,7 @@ class _CommitmentTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final dateStr = commitment.dueDate.toString().substring(0, 10);
+    final dateStr = arabicDate(commitment.dueDate);
 
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpace.x2),

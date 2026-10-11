@@ -30,7 +30,6 @@ class _S extends State<SuppliersScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
       body: ListenableBuilder(
         listenable: AppState.instance,
         builder: (context, _) => _buildBody(context),

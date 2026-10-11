@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/rule.dart';
 import '../services/storage_service.dart';
 import '../design/widgets.dart';
+import '../design/format.dart';
 
 class RulesScreen extends StatefulWidget {
   const RulesScreen({super.key});
@@ -31,7 +32,7 @@ class _RulesScreenState extends State<RulesScreen> {
                   child: ListTile(
                     leading: Icon(r.active ? Icons.notifications_active : Icons.notifications_off),
                     title: Text(r.text),
-                    subtitle: Text('$freqAr — القادمة: ${r.nextDue.toString().substring(0, 10)}'),
+                    subtitle: Text('$freqAr — القادمة: ${arabicDateTime(r.nextDue)}'),
                     trailing: Row(mainAxisSize: MainAxisSize.min, children: [
                       Switch(
                         value: r.active,

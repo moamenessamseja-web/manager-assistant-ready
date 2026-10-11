@@ -6,6 +6,7 @@ import '../models/rule.dart';
 import 'gemini_service.dart';
 import 'storage_service.dart';
 import 'reminder_service.dart';
+import '../design/format.dart';
 
 /// نتيجة البحث عن كيان (موظف/مورد) بالاسم — بتميّز صراحة بين:
 /// "لقيت واحد بالظبط" و"لقيت أكتر من واحد (محتاج توضيح)" و"مفيش حد".
@@ -24,6 +25,98 @@ class AssistantController {
     final d = await GeminiService(key).parse(text);
     final intent = d['intent'] ?? 'other';
 
+    // موثوقية المبلغ: بعض النوايا محتاجة رقمًا. لو الموديل سابه فاضي،
+    // نعيد التحليل **مرة واحدة** — بدون اختراع أي رقم من عندنا.
+    if (_needsAmount.contains(intent) && _missingAmount(intent, d)) {
+      final retry = await GeminiService(key).parse(text);
+      if (!_missingAmount(intent, retry)) {
+        d
+          ..clear()
+          ..addAll(retry);
+      }
+    }
+
+    // آخر خط دفاع (آمن تمامًا): لو الجملة فيها **رقم واحد فقط** والمبلغ لسه
+    // ناقص، فهو المبلغ بلا لبس. لو فيه أكتر من رقم، منخمّنش ونسأل المستخدم.
+    if (_needsAmount.contains(intent) && _missingAmount(intent, d)) {
+      final only = _singleNumberInText(text);
+      if (only != null) d['amount'] = only;
+    }
+
+    // §9 — أمر واحد بعدة أسماء: يُنفَّذ لكل اسم على حدة ثم تُجمَع النتائج،
+    // بدل ما يفشل أو ينفّذ على أول اسم بس.
+    final people = <String>[
+      for (final p in (d['people'] as List? ?? []))
+        if (p.toString().trim().isNotEmpty) p.toString().trim(),
+    ];
+    if (people.length > 1 && _multiPersonIntents.contains(intent)) {
+      final results = <String>[];
+      for (final name in people) {
+        final one = Map<String, dynamic>.from(d);
+        one['person'] = name;
+        one['employee_name'] = name;
+        one['people'] = <String>[];
+        results.add(await _dispatch(intent, one, text));
+      }
+      return '📋 نُفِّذ الأمر على ${people.length} أسماء:\n${results.map((r) => '• $r').join('\n')}';
+    }
+    return _dispatch(intent, d, text);
+  }
+
+  /// النوايا اللي لازم يكون فيها رقم مالي.
+  static const Set<String> _needsAmount = {
+    'add_supplier_payment',
+    'add_advance',
+    'add_deduction',
+    'add_bonus',
+    'create_commitment',
+    'record_purchase',
+  };
+
+  /// يرجع الرقم المذكور في النص **فقط لو كان رقمًا واحدًا** (أرقام عربية أو
+  /// هندية أو إنجليزية). لو فيه أكتر من رقم، يرجع null — لأن الاختيار هيكون تخمين.
+  static double? _singleNumberInText(String text) {
+    const ar = '٠١٢٣٤٥٦٧٨٩';
+    const fa = '۰۱۲۳۴۵۶۷۸۹';
+    final buf = StringBuffer();
+    for (final rune in text.runes) {
+      final ch = String.fromCharCode(rune);
+      final ai = ar.indexOf(ch);
+      final fi = fa.indexOf(ch);
+      if (ai >= 0) {
+        buf.write(ai);
+      } else if (fi >= 0) {
+        buf.write(fi);
+      } else {
+        buf.write(ch);
+      }
+    }
+    final matches = RegExp(r'\d+(?:\.\d+)?').allMatches(buf.toString()).toList();
+    if (matches.length != 1) return null;
+    final v = double.tryParse(matches.first.group(0)!);
+    return (v == null || v <= 0) ? null : v;
+  }
+
+  /// هل الرقم المالي ناقص فعلًا في نتيجة التحليل؟
+  static bool _missingAmount(String intent, Map<String, dynamic> d) {
+    final hasAmount = ((d['amount'] as num?)?.toDouble() ?? 0) > 0;
+    if (intent == 'record_purchase') {
+      return !hasAmount && resolvePurchaseTotal(d) <= 0;
+    }
+    return !hasAmount;
+  }
+
+  /// الأنواع اللي معناها قد يخص أكتر من شخص واحد (§9).
+  static const Set<String> _multiPersonIntents = {
+    'mark_attendance',
+    'add_advance',
+    'add_supplier_payment',
+    'record_purchase',
+    'add_employee',
+    'create_commitment',
+  };
+
+  static Future<String> _dispatch(String intent, Map<String, dynamic> d, String text) async {
     switch (intent) {
       case 'add_employee':
         return _addEmployee(d);
@@ -134,14 +227,25 @@ class AssistantController {
   /// ينشئ سجل توريد بقيمة من بيانات الـAI (item/quantity/unitPrice/total).
   /// القاعدة: الإجمالي الصريح أولاً، ثم الكمية × سعر الوحدة.
   /// يرجع null لو مفيش قيمة ولا كمية وسعر → لا تُسجَّل بضاعة وهمية.
-  static SupplierPurchase? _appendPurchase(Supplier s, Map<String, dynamic> d) {
+  /// قاعدة استنتاج إجمالي التوريد من بيانات الـAI — مكشوفة للاختبار الحقيقي.
+  /// الأولوية: الإجمالي الصريح → المبلغ العام → الكمية × سعر الوحدة.
+  /// (الموديل أحيانًا يرجّع سعر الوحدة بدل الإجمالي، فالقاعدة دي بتغطّي الحالتين.)
+  static double resolvePurchaseTotal(Map<String, dynamic> d) {
     final qty = (d['purchase_quantity'] as num?)?.toDouble() ??
         (d['delivery_quantity'] as num?)?.toDouble();
-    var unitPrice = (d['purchase_unit_price'] as num?)?.toDouble() ?? 0;
+    final unitPrice = (d['purchase_unit_price'] as num?)?.toDouble() ?? 0;
     var total = (d['purchase_total'] as num?)?.toDouble() ??
         (d['amount'] as num?)?.toDouble() ??
         0;
     if (total <= 0 && qty != null && unitPrice > 0) total = qty * unitPrice;
+    return total;
+  }
+
+  static SupplierPurchase? _appendPurchase(Supplier s, Map<String, dynamic> d) {
+    final qty = (d['purchase_quantity'] as num?)?.toDouble() ??
+        (d['delivery_quantity'] as num?)?.toDouble();
+    var unitPrice = (d['purchase_unit_price'] as num?)?.toDouble() ?? 0;
+    final total = resolvePurchaseTotal(d);
     if (total <= 0) return null;
     if (unitPrice <= 0 && qty != null && qty > 0) unitPrice = total / qty;
     final p = SupplierPurchase(
@@ -222,7 +326,7 @@ class AssistantController {
       relatedEntityId: c.id,
       relatedEntityType: 'commitment',
     );
-    return '✅ متوقع توريد ${del.item.isEmpty ? '' : '${del.item} '}من ${s.name} يوم ${del.expectedDate.toString().substring(0, 10)}.${outcome.warningSuffix}';
+    return '✅ متوقع توريد ${del.item.isEmpty ? '' : '${del.item} '}من ${s.name} يوم ${arabicDateTime(del.expectedDate)}.${outcome.warningSuffix}';
   }
 
   static Future<String> _markDeliveryReceived(Map<String, dynamic> d) async {
@@ -297,7 +401,7 @@ class AssistantController {
       nextDue: next,
     );
     await StorageService.saveRule(r);
-    return '✅ قاعدة متابعة جديدة: ${r.text}\nهتتفعل أول مرة يوم ${r.nextDue.toString().substring(0, 10)}.';
+    return '✅ قاعدة متابعة جديدة: ${r.text}\nهتتفعل أول مرة يوم ${arabicDateTime(r.nextDue)}.';
   }
 
   // ---------------- Commitments ----------------
@@ -323,7 +427,7 @@ class AssistantController {
       relatedEntityId: c.id,
       relatedEntityType: 'commitment',
     );
-    return 'تمام ✅ سجلت ${c.person}${c.amount == null ? '' : ' - ${c.amount!.toStringAsFixed(0)} جنيه'}، والتذكير ${c.remindAt.toString().substring(0, 16)}.${outcome.warningSuffix}';
+    return 'تمام ✅ سجلت ${c.person}${c.amount == null ? '' : ' - ${c.amount!.toStringAsFixed(0)} جنيه'}، والتذكير ${arabicDateTime(c.remindAt)}.${outcome.warningSuffix}';
   }
 
   // ---------------- Live business queries (من قاعدة البيانات مباشرة، مش من ذاكرة المحادثة) ----------------
@@ -340,7 +444,7 @@ class AssistantController {
             .where((c) => c.status == 'pending' && c.type == 'debt_to_collect' && (c.amount ?? 0) > 0)
             .toList();
         if (debts.isEmpty) return 'مفيش حد عليه فلوس مسجل دلوقتي. 🎉';
-        final lines = debts.map((c) => '• ${c.person}: ${c.amount!.toStringAsFixed(0)} ج (${c.dueDate.toString().substring(0, 10)})');
+        final lines = debts.map((c) => '• ${c.person}: ${c.amount!.toStringAsFixed(0)} ج (${arabicDate(c.dueDate)})');
         return 'اللي عليهم فلوس:\n${lines.join('\n')}';
 
       case 'absent_today':
@@ -366,7 +470,7 @@ class AssistantController {
         for (final e in StorageService.employees()) {
           final recent = e.advances.where((a) => a.date.isAfter(weekAgo));
           for (final a in recent) {
-            rows.add('• ${e.name}: ${a.amount.toStringAsFixed(0)} ج (${a.date.toString().substring(0, 10)})');
+            rows.add('• ${e.name}: ${a.amount.toStringAsFixed(0)} ج (${arabicDateTime(a.date)})');
           }
         }
         if (rows.isEmpty) return 'مفيش سلف اتسجلت في آخر أسبوع.';

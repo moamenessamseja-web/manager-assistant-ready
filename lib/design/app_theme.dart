@@ -426,6 +426,120 @@ class AppTheme {
       ),
     );
   }
+
+  /// ثيم داكن — نفس بنية الثيم الفاتح بألوان ليلية (To Accio §6).
+  static ThemeData dark() {
+    const bg = Color(0xFF0C1720);
+    const surface = Color(0xFF14232F);
+    const surfaceMuted = Color(0xFF1C2E3C);
+    const border = Color(0xFF2A3E4E);
+    const textPrimary = Color(0xFFE6EDF3);
+    const textSecondary = Color(0xFF9FB0BF);
+    const indicator = Color(0xFF1F3A4D);
+
+    final base = light();
+    final scheme = ColorScheme.fromSeed(
+      seedColor: AppColors.primary,
+      brightness: Brightness.dark,
+      primary: AppColors.primary,
+      secondary: AppColors.secondary,
+      surface: surface,
+      onSurface: textPrimary,
+      outline: border,
+      error: AppColors.danger,
+    );
+
+    return base.copyWith(
+      brightness: Brightness.dark,
+      colorScheme: scheme,
+      scaffoldBackgroundColor: bg,
+      canvasColor: surface,
+      cardColor: surface,
+      dialogBackgroundColor: surface,
+      textTheme: base.textTheme.apply(bodyColor: textPrimary, displayColor: textPrimary),
+      appBarTheme: const AppBarTheme(
+        backgroundColor: surface,
+        foregroundColor: textPrimary,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        centerTitle: false,
+        iconTheme: IconThemeData(size: AppIconSize.lg, color: AppColors.secondary),
+        titleTextStyle: TextStyle(
+          fontFamily: fontFamily,
+          fontSize: 18,
+          fontWeight: FontWeight.w500,
+          color: textPrimary,
+          letterSpacing: 0,
+        ),
+      ),
+      iconTheme: const IconThemeData(size: AppIconSize.md, color: textPrimary),
+      cardTheme: CardThemeData(
+        color: surface,
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+          side: const BorderSide(color: border, width: 1),
+        ),
+        margin: EdgeInsets.zero,
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: surfaceMuted,
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: AppSpace.x4, vertical: AppSpace.x4),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppRadius.sm),
+          borderSide: const BorderSide(color: border, width: 1),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppRadius.sm),
+          borderSide: const BorderSide(color: border, width: 1),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppRadius.sm),
+          borderSide: const BorderSide(color: AppColors.secondary, width: 2),
+        ),
+        hintStyle: const TextStyle(color: textSecondary, fontFamily: fontFamily),
+        labelStyle: const TextStyle(color: textSecondary, fontFamily: fontFamily),
+      ),
+      bottomSheetTheme: const BottomSheetThemeData(backgroundColor: surface),
+      dialogTheme: DialogThemeData(backgroundColor: surface),
+      dividerTheme: const DividerThemeData(color: border),
+      listTileTheme: const ListTileThemeData(iconColor: textSecondary, textColor: textPrimary),
+      navigationBarTheme: NavigationBarThemeData(
+        backgroundColor: surface,
+        indicatorColor: indicator,
+        labelTextStyle: WidgetStateProperty.all(
+          const TextStyle(fontFamily: fontFamily, fontSize: 12, color: textPrimary),
+        ),
+        iconTheme: WidgetStateProperty.all(const IconThemeData(color: textPrimary)),
+      ),
+      chipTheme: base.chipTheme.copyWith(
+        backgroundColor: surfaceMuted,
+        secondarySelectedColor: indicator,
+        selectedColor: indicator,
+        side: const BorderSide(color: border),
+        labelStyle: const TextStyle(color: textPrimary, fontFamily: fontFamily),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: textPrimary,
+          minimumSize: const Size(0, AppTouch.min),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.md)),
+          side: const BorderSide(color: border, width: 1),
+        ),
+      ),
+      snackBarTheme: const SnackBarThemeData(
+        backgroundColor: Color(0xFF24445C),
+        contentTextStyle: TextStyle(fontFamily: fontFamily, color: Colors.white),
+      ),
+      progressIndicatorTheme: const ProgressIndicatorThemeData(
+        color: AppColors.secondary,
+        linearTrackColor: surfaceMuted,
+        circularTrackColor: surfaceMuted,
+      ),
+    );
+  }
 }
 
 /// AppText aliases — مستويات MulkCare السبع

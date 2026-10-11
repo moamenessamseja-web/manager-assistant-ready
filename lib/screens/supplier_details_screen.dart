@@ -46,7 +46,6 @@ class _SupplierDetailsScreenState extends State<SupplierDetailsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
       appBar: AppBar(title: Text(s.name)),
       body: ListView(
         padding: const EdgeInsets.all(AppSpace.x4),
@@ -400,7 +399,7 @@ class _SupplierDetailsScreenState extends State<SupplierDetailsScreen> {
                     const SizedBox(width: AppSpace.x2),
                     Expanded(
                       child: Text(
-                        'متوقع: ${expected.toString().substring(0, 10)}',
+                        'متوقع: ${arabicDateTime(expected)}',
                         style: AppText.body,
                       ),
                     ),
@@ -676,8 +675,8 @@ class _DeliveryRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final dateStr = delivery.received
-        ? 'استُلم: ${delivery.receivedDate?.toString().substring(0, 10) ?? '-'}'
-        : 'متوقع: ${delivery.expectedDate.toString().substring(0, 10)}';
+        ? 'استُلم: ${delivery.receivedDate == null ? '-' : arabicDateTime(delivery.receivedDate!)}'
+        : 'متوقع: ${arabicDateTime(delivery.expectedDate)}';
 
     return Container(
       padding: const EdgeInsets.symmetric(
@@ -783,7 +782,7 @@ class _PaymentRow extends StatelessWidget {
                     color: AppColors.success,
                   ),
                 ),
-                Text(payment.date.toString().substring(0, 10), style: AppText.caption),
+                Text(arabicDateTime(payment.date), style: AppText.caption),
               ],
             ),
           ),
