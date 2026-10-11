@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:speech_to_text/speech_to_text.dart';
-import 'package:speech_to_text/speech_recognition_result.dart';
 import '../services/assistant_controller.dart';
 import '../design/tokens.dart';
+import '../design/app_theme.dart';
 
 /// شاشة المحادثة — Premium Chat Interface
 class ChatScreen extends StatefulWidget {
@@ -58,21 +58,21 @@ class _S extends State<_S> {
     }
   }
 
-  String _parseError(SpeechToTextException err) {
-    switch (err.errorMsg) {
-      case 'error_speech_timeout':
-        return 'لم يتم اكتشاف أي كلام، حاول مرة أخرى';
-      case 'error_no_match':
-        return 'لم أتمكن من التعرف على الكلام، حاول مجددًا';
-      case 'error_permission_denied':
-        return 'يرجى السماح بالوصول للميكروفون من إعدادات الجهاز';
-      case 'error_permission_unavailable':
-        return 'الميكروفون غير متاح، تحقق من الصلاحيات';
-      case 'error_network':
-        return 'خطأ في الاتصال بالإنترنت';
-      default:
-        return 'حدث خطأ أثناء التعرف على الكلام';
+  String _parseError(dynamic err) {
+    final msg = err.errorMsg?.toString() ?? '';
+    if (msg.contains('timeout') || msg.contains('speech_timeout')) {
+      return 'لم يتم اكتشاف أي كلام، حاول مرة أخرى';
     }
+    if (msg.contains('no_match') || msg.contains('notRecognized')) {
+      return 'لم أتمكن من التعرف على الكلام، حاول مجددًا';
+    }
+    if (msg.contains('permission') || msg.contains('unavailable')) {
+      return 'يرجى السماح بالوصول للميكروفون من إعدادات الجهاز';
+    }
+    if (msg.contains('network')) {
+      return 'خطأ في الاتصال بالإنترنت';
+    }
+    return 'حدث خطأ أثناء التعرف على الكلام';
   }
 
   @override
@@ -376,13 +376,15 @@ class _Bubble extends StatelessWidget {
               Container(
                 decoration: BoxDecoration(
                   color: isUser ? AppColors.primary : AppColors.surface,
-                  borderRadius: BorderRadius.only(
-                    topStart: const Radius.circular(AppRadius.lg),
-                    topEnd: const Radius.circular(AppRadius.lg),
-                    bottomStart: Radius.circular(
-                        showTail ? AppRadius.lg : AppRadius.xs),
-                    bottomEnd: Radius.circular(
-                        isUser ? AppRadius.xs : AppRadius.lg),
+                  borderRadius: BorderRadiusDirectional.only(
+                    // Top-left (start) is rounded for user, sharp for assistant
+                    topStart: Radius.circular(isUser ? AppRadius.lg : 0),
+                    // Top-right (end) is sharp for user, rounded for assistant
+                    topEnd: Radius.circular(isUser ? 0 : AppRadius.lg),
+                    // Bottom-start: rounded if same-side-as-top is rounded (user), else sharp
+                    bottomStart: Radius.circular(showTail ? AppRadius.lg : 0),
+                    // Bottom-end: rounded if same-side-as-top is rounded (assistant), else sharp
+                    bottomEnd: Radius.circular(showTail ? (isUser ? 0 : AppRadius.lg) : 0),
                   ),
                   boxShadow: [
                     BoxShadow(
