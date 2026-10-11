@@ -33,6 +33,8 @@ class AssistantController {
         return _markAttendance(d);
       case 'add_supplier':
         return _addSupplier(d);
+      case 'record_purchase':
+        return _recordPurchaseIntent(d);
       case 'supplier_delivery':
         return _supplierDelivery(d);
       case 'mark_delivery_received':
@@ -121,10 +123,63 @@ class AssistantController {
       name: name,
       itemType: d['supplier_item'] ?? '',
       phone: d['supplier_phone'] ?? '',
-      totalOwed: (d['amount'] as num?)?.toDouble() ?? 0,
     );
+    // لو المستخدم ذكر قيمة بضاعة ابتدائية، تُسجَّل كسجل توريد بقيمة —
+    // وليست "دين" مقتضب. لو ذكر مبلغ مدفوع فقط، لا تُسجَّل بضاعة.
+    _appendPurchase(s, d);
     await StorageService.saveSupplier(s);
     return '✅ سجلت المورد ${s.name}${s.itemType.isEmpty ? '' : ' (${s.itemType})'}.';
+  }
+
+  /// ينشئ سجل توريد بقيمة من بيانات الـAI (item/quantity/unitPrice/total).
+  /// القاعدة: الإجمالي الصريح أولاً، ثم الكمية × سعر الوحدة.
+  /// يرجع null لو مفيش قيمة ولا كمية وسعر → لا تُسجَّل بضاعة وهمية.
+  static SupplierPurchase? _appendPurchase(Supplier s, Map<String, dynamic> d) {
+    final qty = (d['purchase_quantity'] as num?)?.toDouble() ??
+        (d['delivery_quantity'] as num?)?.toDouble();
+    var unitPrice = (d['purchase_unit_price'] as num?)?.toDouble() ?? 0;
+    var total = (d['purchase_total'] as num?)?.toDouble() ??
+        (d['amount'] as num?)?.toDouble() ??
+        0;
+    if (total <= 0 && qty != null && unitPrice > 0) total = qty * unitPrice;
+    if (total <= 0) return null;
+    if (unitPrice <= 0 && qty != null && qty > 0) unitPrice = total / qty;
+    final p = SupplierPurchase(
+      id: const Uuid().v4(),
+      item: d['purchase_item'] ?? d['delivery_item'] ?? s.itemType,
+      quantity: qty,
+      unit: d['purchase_unit'] ?? d['delivery_unit'] ?? '',
+      unitPrice: unitPrice,
+      total: total,
+      date: DateTime.now(),
+      note: d['text_original'] ?? '',
+    );
+    s.purchases.add(p);
+    return p;
+  }
+
+  /// تسجيل توريد/مشتريات بقيمة (بضاعة مستلمة) — منفصل تمامًا عن الدفعات.
+  static Future<String> _recordPurchaseIntent(Map<String, dynamic> d) async {
+    final name = d['person'] ?? '';
+    if (name.trim().isEmpty) return '❓ محتاج اسم المورد.';
+    final resolved = _resolveSupplier(name);
+    Supplier s;
+    if (!resolved.ok) {
+      final matches = StorageService.suppliersMatching(name);
+      if (matches.length > 1) return resolved.message!;
+      s = Supplier(id: const Uuid().v4(), name: name, itemType: d['supplier_item'] ?? '');
+    } else {
+      s = resolved.value!;
+    }
+    final added = _appendPurchase(s, d);
+    if (added == null) {
+      return '❓ محتاج قيمة التوريد، أو الكمية وسعر الوحدة، عشان أسجّلها صح.';
+    }
+    await StorageService.saveSupplier(s);
+    final qty = added.quantityLabel.isEmpty ? '' : ' (${added.quantityLabel})';
+    return '✅ سجلت توريد ${added.item}$qty بقيمة ${added.total.toStringAsFixed(0)} ج '
+        'على حساب ${s.name}. إجمالي البضاعة ${s.goodsTotal.toStringAsFixed(0)} ج، '
+        'المتبقي ${s.balanceDue.toStringAsFixed(0)} ج.';
   }
 
   static Future<String> _supplierDelivery(Map<String, dynamic> d) async {
@@ -179,20 +234,34 @@ class AssistantController {
     final del = pending.first;
     del.received = true;
     del.receivedDate = DateTime.now();
-    final amount = (d['amount'] as num?)?.toDouble();
-    if (amount != null) s.totalOwed += amount;
+    // لو ذُكرت قيمة (أو كمية × سعر) تُسجَّل كتوريد بقيمة مرتبط بهذا التوريد المتوقع.
+    // مبلغ البضاعة لا يُسجَّل كدفعة — الدفعات لها مسارها المستقل.
+    final merged = Map<String, dynamic>.from(d);
+    merged['purchase_item'] ??= del.item;
+    merged['purchase_quantity'] ??= del.quantity;
+    merged['purchase_unit'] ??= del.unit;
+    final added = _appendPurchase(s, merged);
+    if (added != null) added.deliveryId = del.id;
     await StorageService.saveSupplier(s);
-    return '✅ تم تأكيد استلام التوريد من ${s.name}.${amount != null ? ' أُضيف ${amount.toStringAsFixed(0)} جنيه على حسابه (المستحق الآن ${s.balanceDue.toStringAsFixed(0)} جنيه).' : ''}';
+    return '✅ تم تأكيد استلام ${del.item} من ${s.name}.'
+        '${added != null ? ' أُضيف توريد بقيمة ${added.total.toStringAsFixed(0)} ج (المتبقي الآن ${s.balanceDue.toStringAsFixed(0)} ج).' : ' (من غير قيمة مسجّلة — سجّل القيمة لو عايز تتبّع الحساب.)'}';
   }
 
   static Future<String> _addSupplierPayment(Map<String, dynamic> d) async {
     final resolved = _resolveSupplier(d['person'] ?? '');
     if (!resolved.ok) return resolved.message!;
     final s = resolved.value!;
+    final amt = (d['amount'] as num?)?.toDouble() ?? 0;
+    if (amt <= 0) return '❓ محتاج مبلغ الدفعة اللي اتدفعت فعلاً.';
     s.payments.add(SupplierPayment(
-        id: const Uuid().v4(), amount: (d['amount'] as num?)?.toDouble() ?? 0, date: DateTime.now()));
+      id: const Uuid().v4(),
+      amount: amt,
+      date: DateTime.now(),
+      note: d['text_original'] ?? '',
+    ));
     await StorageService.saveSupplier(s);
-    return '✅ سجلت دفعة لـ ${s.name}. المتبقي عليك له: ${s.balanceDue.toStringAsFixed(0)} جنيه.';
+    return '✅ سجلت دفعة ${amt.toStringAsFixed(0)} ج لـ ${s.name} (نقد مدفوع). '
+        'إجمالي البضاعة ${s.goodsTotal.toStringAsFixed(0)} ج، المتبقي ${s.balanceDue.toStringAsFixed(0)} ج.';
   }
 
   // ---------------- Rules ----------------
@@ -286,7 +355,10 @@ class AssistantController {
         final resolved = _resolveSupplier(name);
         if (!resolved.ok) return resolved.message!;
         final s = resolved.value!;
-        return 'المستحق عليك لـ ${s.name}: ${s.balanceDue.toStringAsFixed(0)} جنيه.';
+        return 'حساب ${s.name}:\n'
+            '• إجمالي البضاعة: ${s.goodsTotal.toStringAsFixed(0)} ج\n'
+            '• المدفوع: ${s.totalPaid.toStringAsFixed(0)} ج\n'
+            '• المتبقي: ${s.balanceDue.toStringAsFixed(0)} ج';
 
       case 'advances_this_week':
         final weekAgo = today.subtract(const Duration(days: 7));

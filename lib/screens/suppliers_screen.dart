@@ -5,7 +5,9 @@ import '../services/app_state.dart';
 import '../design/tokens.dart';
 import '../design/app_theme.dart';
 import '../design/widgets.dart';
+import '../design/format.dart';
 import 'supplier_details_screen.dart';
+import 'supplier_records.dart';
 
 /// الموردون — Premium Supplier Management Screen
 class SuppliersScreen extends StatefulWidget {
@@ -46,7 +48,7 @@ class _S extends State<SuppliersScreen> {
     final all = StorageService.suppliers();
     final active = all.where((s) => !s.archived).toList();
     final totalDue = active.fold<double>(0, (s, x) => s + x.balanceDue);
-    final totalOwed = active.fold<double>(0, (s, x) => s + x.totalOwed);
+    final totalGoods = active.fold<double>(0, (s, x) => s + x.goodsTotal);
     final totalPaid = active.fold<double>(0, (s, x) => s + x.totalPaid);
 
     final filtered = switch (_filter) {
@@ -107,7 +109,7 @@ class _S extends State<SuppliersScreen> {
                       children: [
                         Text('إجمالي قيمة البضاعة', style: AppText.caption),
                         Text(
-                          '${totalOwed.toStringAsFixed(0)} ج',
+                           '${totalGoods.toStringAsFixed(0)} ج',
                           style: AppText.titleMedium.copyWith(
                             fontSize: 18,
                             color: AppColors.info,
@@ -500,16 +502,41 @@ class _SupplierCard extends StatelessWidget {
                 ),
                 PopupMenuButton<String>(
                   icon: const Icon(Icons.more_vert, size: AppIconSize.md),
-                  onSelected: (v) {
-                    if (v == 'archive') onArchive();
+                  onSelected: (v) async {
+                    if (v == 'purchase') {
+                      if (await showAddPurchaseSheet(context, supplier)) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                            content: Text(
+                                'تم تسجيل التوريد — إجمالي البضاعة ${money(supplier.goodsTotal)}'),
+                          ));
+                        }
+                      }
+                    } else if (v == 'payment') {
+                      if (await showAddPaymentSheet(context, supplier)) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                            content: Text('تم تسجيل الدفعة — المتبقي ${money(supplier.balanceDue)}'),
+                          ));
+                        }
+                      }
+                    } else if (v == 'archive') {
+                      onArchive();
+                    } else if (v == 'delete') {
+                      await deleteSupplierSafely(context, supplier);
+                    }
                   },
                   itemBuilder: (_) => [
+                    const PopupMenuItem(value: 'purchase', child: Text('تسجيل توريد')),
+                    const PopupMenuItem(value: 'payment', child: Text('تسجيل دفعة')),
                     PopupMenuItem(
                       value: 'archive',
                       child: Text(
                         supplier.archived ? 'إلغاء الأرشفة' : 'أرشفة',
                       ),
                     ),
+                    if (!supplier.hasHistory)
+                      const PopupMenuItem(value: 'delete', child: Text('حذف نهائي')),
                   ],
                 ),
               ],
@@ -520,7 +547,7 @@ class _SupplierCard extends StatelessWidget {
                 Expanded(
                   child: _SupplierStat(
                     label: 'إجمالي البضاعة',
-                    value: '${supplier.totalOwed.toStringAsFixed(0)} ج',
+                    value: '${supplier.goodsTotal.toStringAsFixed(0)} ج',
                     color: AppColors.info,
                   ),
                 ),

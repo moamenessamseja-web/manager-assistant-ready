@@ -21,9 +21,10 @@ class GeminiService {
 - add_advance: سلفة لموظف
 - mark_attendance: تسجيل حضور موظف
 - add_supplier: تسجيل مورد جديد (زي "مورد البن" أو "محل الألبان")
-- supplier_delivery: توريد متوقع من مورد قائم (كمية وصنف وتاريخ متوقع)
-- mark_delivery_received: تأكيد استلام توريد (ويُحسب كدين على المحل للمورد لو ذُكر مبلغ)
-- add_supplier_payment: سداد مبلغ لمورد (تقليل المديونية)
+ - record_purchase: تسجيل توريد/مشتريات **بقيمة** استلمناها من مورد (بضاعة مستلمة: صنف/كمية/سعر وحدة/إجمالي). ده اللي بيزوّد "إجمالي البضاعة" — مش دفعة نقدية.
+ - supplier_delivery: توريد متوقع من مورد (موعد متوقع فقط، من غير قيمة مالية)
+ - mark_delivery_received: تأكيد استلام توريد متوقع (ومعه قيمة البضاعة لو ذُكرت)
+ - add_supplier_payment: تسجيل **دفعة نقدية فعلية** دفعناها للمورد (بتقلّل المتبقي)
 - add_rule: قاعدة متابعة متكررة زي "كل أول الشهر فكرني بالإيجار" أو "كل جمعة ابعتلي ملخص"
 - query_business_data: سؤال عن بيانات حالية فعلية (وليس طلب تسجيل شيء جديد)، مثل:
   "مين عليه فلوس؟" → query_type: debtors
@@ -42,9 +43,20 @@ follow_up_rule: نص حر لو فيه شرط متابعة
 employee_name, employee_role, start_date, salary: لموظف جديد
 supplier_item: الصنف الأساسي اللي المورد بيوردّه (بن/لبن/خبز...)
 supplier_phone: رقم تليفون لو ذُكر
-delivery_item: صنف التوريد المحدد
-delivery_quantity: رقم الكمية فقط
-delivery_unit: وحدة القياس (كيلو/كرتونة/لتر...)
+ delivery_item: صنف التوريد المحدد (للمتوقع)
+ delivery_quantity: رقم الكمية فقط
+ delivery_unit: وحدة القياس (كيلو/كرتونة/لتر...)
+ purchase_item: صنف التوريد/المشتريات بقيمة
+ purchase_quantity: رقم الكمية
+ purchase_unit: وحدة القياس
+ purchase_unit_price: سعر الوحدة (رقم فقط)
+ purchase_total: الإجمالي المذكور صراحةً (رقم فقط) لو المستخدم قال المبلغ الإجمالي
+
+قاعدة فارقة: قيمة البضاعة ليست دفعة، والدفعة ليست بضاعة.
+ - "محمود سلم 20 كيلو بن بـ2000" → intent=record_purchase، purchase_quantity=20، purchase_unit=كيلو، purchase_total=2000 (مش دفعة).
+ - "دفعت لمحمود 500" → intent=add_supplier_payment، amount=500.
+ - لو الصياغة ملتبسة فعلًا بين بضاعة ودفعة، ارجع intent=other ولا تخمّن.
+ - لا تخترع سعر وحدة غير مذكور.
 rule_text: نص القاعدة كاملاً
 rule_frequency: monthly/weekly/daily
 rule_anchor: رقم يوم الشهر (1-31) لو شهرية، أو رقم يوم الأسبوع (1=إثنين..7=أحد) لو أسبوعية
@@ -87,6 +99,11 @@ text_original: نص المستخدم كما هو
             'delivery_item': {'type': 'STRING'},
             'delivery_quantity': {'type': 'NUMBER', 'nullable': true},
             'delivery_unit': {'type': 'STRING'},
+            'purchase_item': {'type': 'STRING'},
+            'purchase_quantity': {'type': 'NUMBER', 'nullable': true},
+            'purchase_unit': {'type': 'STRING'},
+            'purchase_unit_price': {'type': 'NUMBER', 'nullable': true},
+            'purchase_total': {'type': 'NUMBER', 'nullable': true},
             'rule_text': {'type': 'STRING'},
             'rule_frequency': {'type': 'STRING'},
             'rule_anchor': {'type': 'NUMBER', 'nullable': true},

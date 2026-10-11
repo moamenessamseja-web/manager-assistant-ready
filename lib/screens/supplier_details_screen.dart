@@ -4,6 +4,8 @@ import '../services/storage_service.dart';
 import '../design/tokens.dart';
 import '../design/app_theme.dart';
 import '../design/widgets.dart';
+import '../design/format.dart';
+import 'supplier_records.dart';
 
 /// تفاصيل المورد — Premium Supplier Detail Screen
 class SupplierDetailsScreen extends StatefulWidget {
@@ -23,7 +25,23 @@ class _SupplierDetailsScreenState extends State<SupplierDetailsScreen> {
     s = widget.supplier;
   }
 
-  bool get _hasHistory => s.deliveries.isNotEmpty || s.payments.isNotEmpty;
+  bool get _hasHistory =>
+      s.deliveries.isNotEmpty || s.payments.isNotEmpty || s.purchases.isNotEmpty;
+
+  /// فتح تقرير تفصيلي حقيقي لأحد أرقام المورد (To Accio §2).
+  void _openReport(SupplierReportKind kind) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => SupplierReportScreen(supplier: s, kind: kind)),
+    );
+  }
+
+  /// تسجيل توريد بقيمة — مسار مستقل عن الدفعات.
+  Future<void> _addPurchase() async {
+    if (await showAddPurchaseSheet(context, s)) {
+      if (mounted) setState(() {});
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -102,22 +120,24 @@ class _SupplierDetailsScreenState extends State<SupplierDetailsScreen> {
                 Row(
                   children: [
                     Expanded(
-                      child: _FinanceTile(
-                        label: 'إجمالي البضاعة',
-                        value: '${s.totalOwed.toStringAsFixed(0)} ج',
-                        icon: Icons.inventory_2_outlined,
-                        color: AppColors.info,
-                      ),
-                    ),
-                    const SizedBox(width: AppSpace.x3),
-                    Expanded(
-                      child: _FinanceTile(
-                        label: 'إجمالي المدفوع',
-                        value: '${s.totalPaid.toStringAsFixed(0)} ج',
-                        icon: Icons.payments_outlined,
-                        color: AppColors.success,
-                      ),
-                    ),
+                       child: _FinanceTile(
+                         label: 'إجمالي البضاعة',
+                         value: money(s.goodsTotal),
+                         icon: Icons.inventory_2_outlined,
+                         color: AppColors.info,
+                         onTap: () => _openReport(SupplierReportKind.purchases),
+                       ),
+                     ),
+                     const SizedBox(width: AppSpace.x3),
+                     Expanded(
+                       child: _FinanceTile(
+                         label: 'إجمالي المدفوع',
+                         value: money(s.totalPaid),
+                         icon: Icons.payments_outlined,
+                         color: AppColors.success,
+                         onTap: () => _openReport(SupplierReportKind.payments),
+                       ),
+                     ),
                   ],
                 ),
                 const SizedBox(height: AppSpace.x3),
@@ -199,15 +219,38 @@ class _SupplierDetailsScreenState extends State<SupplierDetailsScreen> {
               Expanded(
                 child: _ActionButton(
                   icon: Icons.edit_outlined,
-                  label: 'تعديل',
-                  color: AppColors.primary,
-                  onTap: _editDialog,
-                ),
-              ),
-            ],
-          ),
+                   label: 'تعديل',
+                   color: AppColors.primary,
+                   onTap: _editDialog,
+                 ),
+               ),
+             ],
+           ),
 
-          const SizedBox(height: AppSpace.x4),
+           const SizedBox(height: AppSpace.x3),
+
+           // ── مسار التوريد بقيمة (منفصل عن الدفعات) + تقرير المستحقات ──
+           Row(
+             children: [
+               Expanded(
+                 child: FilledButton.icon(
+                   onPressed: _addPurchase,
+                   icon: const Icon(Icons.inventory_2_outlined, size: AppIconSize.md),
+                   label: const Text('تسجيل توريد بقيمة'),
+                 ),
+               ),
+               const SizedBox(width: AppSpace.x3),
+               Expanded(
+                 child: OutlinedButton.icon(
+                   onPressed: () => _openReport(SupplierReportKind.balance),
+                   icon: const Icon(Icons.account_balance_wallet_outlined, size: AppIconSize.md),
+                   label: const Text('تقرير المستحقات'),
+                 ),
+               ),
+             ],
+           ),
+
+           const SizedBox(height: AppSpace.x4),
 
           // ── Deliveries ───────────────────────────────────────
           AppSectionHeader(
@@ -515,33 +558,50 @@ class _FinanceTile extends StatelessWidget {
   final String value;
   final IconData icon;
   final Color color;
+  final VoidCallback? onTap;
 
   const _FinanceTile({
     required this.label,
     required this.value,
     required this.icon,
     required this.color,
+    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(AppSpace.x3),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.06),
+    return Material(
+      color: color.withValues(alpha: 0.06),
+      borderRadius: BorderRadius.circular(AppRadius.md),
+      child: InkWell(
+        onTap: onTap,
         borderRadius: BorderRadius.circular(AppRadius.md),
-        border: Border.all(color: color.withValues(alpha: 0.2)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, size: AppIconSize.md, color: color),
-          const SizedBox(height: AppSpace.x2),
-          Text(value, style: AppText.titleMedium.copyWith(
-            fontSize: 16, fontWeight: FontWeight.w700, color: color,
-          )),
-          Text(label, style: AppText.caption),
-        ],
+        child: Container(
+          padding: const EdgeInsets.all(AppSpace.x3),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppRadius.md),
+            border: Border.all(color: color.withValues(alpha: 0.2)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(icon, size: AppIconSize.md, color: color),
+                  const Spacer(),
+                  if (onTap != null)
+                    const Icon(Icons.chevron_left,
+                        size: AppIconSize.sm, color: AppColors.textDisabled),
+                ],
+              ),
+              const SizedBox(height: AppSpace.x2),
+              Text(value, style: AppText.titleMedium.copyWith(
+                fontSize: 16, fontWeight: FontWeight.w700, color: color,
+              )),
+              Text(label, style: AppText.caption),
+            ],
+          ),
+        ),
       ),
     );
   }
