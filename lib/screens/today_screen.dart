@@ -4,6 +4,7 @@ import '../services/storage_service.dart';
 import '../services/reminder_service.dart';
 import '../services/app_state.dart';
 import '../design/tokens.dart';
+import '../design/app_theme.dart';
 import '../design/widgets.dart';
 import 'notification_debug_screen.dart';
 
