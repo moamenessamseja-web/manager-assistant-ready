@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'tokens.dart';
+import 'app_theme.dart';
 
 /// ─────────────────────────────────────────────────────────────
 ///  PREMIUM DESIGN WIDGETS
@@ -268,9 +269,6 @@ class AppStatusBanner extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.all(AppSpace.x3),
             decoration: BoxDecoration(
-              border: Border(
-                start: BorderSide(color: _color, width: 4),
-              ),
               borderRadius: BorderRadius.circular(AppRadius.md),
             ),
             child: content,
@@ -283,7 +281,6 @@ class AppStatusBanner extends StatelessWidget {
       padding: const EdgeInsets.all(AppSpace.x3),
       decoration: BoxDecoration(
         color: _bg,
-        border: Border(start: BorderSide(color: _color, width: 4)),
         borderRadius: BorderRadius.circular(AppRadius.md),
       ),
       child: content,

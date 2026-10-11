@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/storage_service.dart';
 import '../services/app_state.dart';
 import '../design/tokens.dart';
+import '../design/app_theme.dart';
 import '../design/widgets.dart';
 import 'staff_screen.dart';
 import 'suppliers_screen.dart';
@@ -228,7 +229,7 @@ class _BriefScreenState extends State<BriefScreen> {
     );
   }
 
-  Widget _navigateTo(BuildContext context, Widget screen) {
+  void _navigateTo(BuildContext context, Widget screen) {
     Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
   }
 
@@ -360,7 +361,7 @@ class _StatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final (bg, fg) = _colors();
+    final (bg, fg) = _colors;
     return AppCard(
       elevated: true,
       padding: const EdgeInsets.all(AppSpace.x3),

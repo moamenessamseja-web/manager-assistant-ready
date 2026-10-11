@@ -369,7 +369,7 @@ class _HeaderNotificationBell extends StatelessWidget {
                     size: AppIconSize.lg,
                   ),
                   if (broken > 0)
-                    Positioned(
+                    PositionedDirectional(
                       top: -2,
                       end: -2,
                       child: Container(

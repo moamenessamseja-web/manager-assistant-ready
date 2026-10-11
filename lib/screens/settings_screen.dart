@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/storage_service.dart';
 import '../design/tokens.dart';
+import '../design/app_theme.dart';
 import '../design/widgets.dart';
 import 'notification_debug_screen.dart';
 
@@ -29,7 +30,7 @@ class _S extends State<SettingsScreen> {
         appBar: AppBar(title: const Text('الإعدادات')),
         body: ListView(
           children: [
-            const AppSectionHeader('Gemini API Key'),
+            const AppSectionHeader(title: 'Gemini API Key'),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: AppSpace.x4),
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

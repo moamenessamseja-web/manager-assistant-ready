@@ -12,7 +12,7 @@ class ChatScreen extends StatefulWidget {
   State<ChatScreen> createState() => _S();
 }
 
-class _S extends State<_S> {
+class _S extends State<ChatScreen> {
   final _text = TextEditingController();
   final _scroll = ScrollController();
   final _stt = SpeechToText();
@@ -150,7 +150,7 @@ class _S extends State<_S> {
     await _stt.listen(
       localeId: 'ar_EG',
       listenMode: ListenMode.confirmation,
-      onResult: (SpeechRecognitionResult r) {
+      onResult: (r) {
         if (r.finalResult) {
           setState(() => _lastWords = r.recognizedWords);
         }

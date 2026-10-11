@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/notification_service.dart';
 import '../services/storage_service.dart';
 import '../design/tokens.dart';
+import '../design/app_theme.dart';
 import '../design/widgets.dart';
 
 /// شاشة تشخيص غير مخصصة للمستخدم العادي — تساعد في معرفة سبب عدم وصول
@@ -56,7 +57,7 @@ class _NotificationDebugScreenState extends State<NotificationDebugScreen> {
                 Text('الإشعارات المجدولة حالياً عند النظام: $_pendingCount'),
                 Text('إجمالي التذكيرات المسجلة: ${reminders.length}'),
                 const SizedBox(height: AppSpace.x2),
-                if (failed.isNotEmpty) AppBadge('${failed.length} تذكيرات بها مشكلة', kind: AppStatusKind.warning),
+                if (failed.isNotEmpty) AppBadge(kind: BadgeKind.warning, label: '${failed.length} تذكيرات بها مشكلة'),
               ]),
             ),
           ),
@@ -92,7 +93,7 @@ class _NotificationDebugScreenState extends State<NotificationDebugScreen> {
           ]),
           if (_testResult.isNotEmpty) Padding(padding: const EdgeInsets.only(top: AppSpace.x2), child: Text(_testResult)),
           const Divider(height: AppSpace.x8),
-          const AppSectionHeader('آخر التذكيرات'),
+          const AppSectionHeader(title: 'آخر التذكيرات'),
           if (reminders.isEmpty) const Padding(padding: EdgeInsets.all(AppSpace.x3), child: Text('لا يوجد تذكيرات بعد.', style: AppText.bodyMuted)),
           ...reminders.take(30).map((r) => ListTile(
                 dense: true,

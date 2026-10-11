@@ -263,6 +263,7 @@ class _S extends State<StaffScreen> {
                   id: DateTime.now().millisecondsSinceEpoch.toString(),
                   name: n.text.trim(),
                   role: r.text.trim(),
+                  startDate: DateTime.now(),
                   salaryMonthly: sal,
                   advances: [],
                   attendance: [],

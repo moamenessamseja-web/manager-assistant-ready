@@ -15,7 +15,7 @@ class SuppliersScreen extends StatefulWidget {
   State<SuppliersScreen> createState() => _S();
 }
 
-class _S extends State<_S> {
+class _S extends State<SuppliersScreen> {
   String _filter = 'active';
   final _search = TextEditingController();
 
