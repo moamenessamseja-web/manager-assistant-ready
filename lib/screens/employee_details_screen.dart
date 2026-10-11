@@ -3,6 +3,7 @@ import 'package:uuid/uuid.dart';
 import '../models/employee.dart';
 import '../services/storage_service.dart';
 import '../design/tokens.dart';
+import '../design/app_theme.dart';
 import '../design/widgets.dart';
 
 /// تفاصيل الموظف — Premium Employee Detail Screen
@@ -164,7 +165,7 @@ class _S extends State<EmployeeDetailsScreen> {
                   children: [
                     _DetailStat(
                       label: 'المرتب',
-                      value: '${e.salary.toStringAsFixed(0)} ج',
+                      value: '${e.salaryMonthly.toStringAsFixed(0)} ج',
                       color: AppColors.primary,
                     ),
                     _DetailStat(
@@ -201,7 +202,7 @@ class _S extends State<EmployeeDetailsScreen> {
                     Expanded(
                       child: _FinanceTile(
                         label: 'المرتب الشهري',
-                        value: '${e.salary.toStringAsFixed(0)} ج',
+                        value: '${e.salaryMonthly.toStringAsFixed(0)} ج',
                         icon: Icons.payments_outlined,
                         color: AppColors.primary,
                       ),
@@ -496,7 +497,7 @@ class _S extends State<EmployeeDetailsScreen> {
   void _editDialog() {
     final n = TextEditingController(text: e.name);
     final r = TextEditingController(text: e.role);
-    final s = TextEditingController(text: e.salary.toStringAsFixed(0));
+    final s = TextEditingController(text: e.salaryMonthly.toStringAsFixed(0));
     showAppBottomSheet(
       context: context,
       title: 'تعديل ${e.name}',
@@ -525,7 +526,7 @@ class _S extends State<EmployeeDetailsScreen> {
               onPressed: () async {
                 e.name = n.text.trim();
                 e.role = r.text.trim();
-                e.salary = double.tryParse(s.text) ?? e.salary;
+                e.salaryMonthly = double.tryParse(s.text) ?? e.salaryMonthly;
                 await StorageService.saveEmployee(e);
                 if (mounted) Navigator.pop(context);
                 setState(() {});
