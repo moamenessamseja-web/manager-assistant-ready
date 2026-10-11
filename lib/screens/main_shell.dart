@@ -10,6 +10,7 @@ import 'settings_screen.dart';
 import 'notification_debug_screen.dart';
 import '../design/tokens.dart';
 import '../design/widgets.dart';
+import '../design/app_theme.dart';
 import '../services/app_state.dart';
 import '../services/storage_service.dart';
 
@@ -401,6 +402,36 @@ class _HeaderNotificationBell extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+/// Drawer menu item
+class _DrawerItem extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  const _DrawerItem({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      leading: Icon(icon, size: AppIconSize.md, color: AppColors.textSecondary),
+      title: Text(label, style: AppText.body),
+      trailing: const Icon(Icons.arrow_forward, size: 16, color: AppColors.textDisabled),
+      onTap: onTap,
+      contentPadding: const EdgeInsets.symmetric(
+        horizontal: AppSpace.x4,
+        vertical: AppSpace.x1,
+      ),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadius.md),
+      ),
     );
   }
 }
