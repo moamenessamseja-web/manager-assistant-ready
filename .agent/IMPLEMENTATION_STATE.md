@@ -1,117 +1,84 @@
 # Implementation State
 
-## Session Info
-- **Agent:** Accio (root session)
-- **Started:** 2026-10-11
-- **Repository:** moamenessamseja-web/manager-assistant-ready
-- **Baseline commit:** 5067e87 (main — broken build, design refactor)
-- **Last GREEN build (user-reported):** build #31
+Last completed phase: **Phase 3 — Employee management**
+Current phase: Phase 4 — Today dashboard (not started)
+Next phase: Phase 4 — Today operational dashboard
+Last successful commit: `df46175` (feat: redesign employee management)
+Last successful build: GitHub Actions run **#57 → SUCCESS** (commit `a28822f`), release `build-57` (app-release.apk 53.6 MB)
+Last successful test: `flutter test` → **14/14 pass** (model/supplier/employee) on Flutter 3.47.7
 
----
+## Files changed (this session)
+- `.agent/ARCHITECTURE_AUDIT.md` — rewritten for current HEAD (9 defects documented)
+- `.agent/IMPLEMENTATION_STATE.md` — this file
+- `lib/design/format.dart` — NEW: Arabic money/date-time formatting
+- `lib/design/widgets.dart` — NEW shared components: AppAvatar, AppSearchBar, AppFilterChips,
+  AppSegmented, AppEntityRow, AppStatTile, AppInfoRow, AppTimelineItem, AppStatusIndicator, showAppSnack
+- `lib/models/supplier.dart` — NEW `SupplierPurchase`, `PurchaseBalance`, `SupplierEvent`;
+  `goodsTotal` / `allocatePayments()` / `timeline` / `hasHistory`
+- `lib/models/employee.dart` — extended: contact/ID fields, photoPath, attendanceLog,
+  payments/deductions/bonuses/notes, timeline, markAttendance/markCheckout
+- `lib/services/assistant_controller.dart` — new `record_purchase`; goods value no longer booked as payment
+- `lib/services/gemini_service.dart` — purchase_* args + goods-vs-payment rule
+- `lib/screens/supplier_forms.dart` — NEW (record supply / record payment / add + edit / archive / safe delete)
+- `lib/screens/supplier_report_screen.dart` — NEW (drill-down reports: purchases / payments / balance, with filters)
+- `lib/screens/suppliers_screen.dart` — rebuilt list (search, filters, entity rows, contextual overflow, FAB)
+- `lib/screens/supplier_details_screen.dart` — rebuilt (tappable finance summary, quick actions, timeline, tabs)
+- `lib/screens/employee_forms.dart` — NEW (attendance/advance/payment/deduction/bonus/note/edit + photo)
+- `lib/screens/employee_details_screen.dart` — rebuilt (photo header, summary, quick actions, 4 tabs)
+- `pubspec.yaml` — added `image_picker`, `path_provider` (employee photo)
+- `test/supplier_test.dart` — NEW (8 tests, incl. the 6 mandatory acceptance cases)
+- `test/employee_test.dart` — NEW (5 tests, incl. back-compat)
 
-## ⚠️ Build Breakage Window (builds 32 → 55, all FAILED)
+## Current known issues (non-blocking)
+- `flutter analyze`: 0 errors; 8 info/warnings (pre-existing STT deprecations, unused imports/elements,
+  one `value:`→`initialValue:` in rules_screen). To be cleaned in Phase 11 (UX polish).
+- Physical-device verification still pending for: notification delivery after reboot,
+  attendance via Chat, Brief navigation, and the new employee photo picker on a real device.
+- Chat/AI flows were updated but only unit-verified; end-to-end AI test needs a live Gemini key (Phase 9).
 
-After build #31 (green), a "premium redesign" refactor series was pushed to `main`
-(commits `ad5ff5c` → `5067e87`) that **did not compile**. All of builds 32–55 failed
-at the `flutter build apk` step with Dart compile errors (`Target kernel_snapshot_program failed`).
+## Blocked items
+- None. (Agent sandbox has no Android SDK, so the release APK is produced by GitHub Actions.)
 
-Note: the previous session wrote the design code but **never updated this file**,
-which is why the state drifted. This file is now authoritative again.
+## Database migration status
+Additive JSON only — no destructive migration.
+- Supplier: `purchases[]` added; legacy `totalOwed` kept and shown as a clearly-labelled
+  "رصيد قديم (بدون تفاصيل)" line. `goodsTotal = totalOwed + Σpurchases.total`; `balanceDue = goodsTotal − totalPaid`.
+- Employee: new optional fields default when absent; `attendance` (day strings) unchanged for
+  today/brief/memory compatibility. Old records without timestamps show "وقت غير متوفر".
+- Old data continues to work — covered by back-compat tests.
 
-### Root causes of the build failure (complete error inventory)
-| # | File | Error |
-|---|------|-------|
-| 1 | `chat_screen.dart:15` | `class _S extends State<_S>` — wrong generic bound |
-| 2 | `suppliers_screen.dart:18` | same `State<_S>` pattern |
-| 3 | `chat_screen.dart:153` | `SpeechRecognitionResult` isn't a type |
-| 4 | `main_shell.dart:374` | `Positioned(... end: ...)` — no `end` param |
-| 5 | `staff_screen.dart:262` | `Employee(...)` missing required `startDate` |
-| 6 | `brief_screen.dart` | `AppText` undefined + `Widget _navigateTo` null return + `_colors()` invoked as method |
-| 7 | `settings_screen.dart` | `AppSectionHeader('...')` positional instead of named `title:` |
-| 8 | `notification_debug_screen.dart` | `AppBadge('...', kind: AppStatusKind.warning)` positional + wrong enum name + `AppSectionHeader` positional |
-| 9 | `design/widgets.dart` | missing `app_theme.dart` import (→ `AppText` undefined) + `Border(start:)` invalid (must be `BorderDirectional`) |
+## AI pipeline status
+Working. `record_purchase` added; goods price is no longer written as a payment;
+`mark_delivery_received` records supply value as a purchase; `supplier_balance` returns a breakdown.
+Gemini prompt + responseSchema updated (purchase_item/quantity/unit/unit_price/total).
+**Not yet verified end-to-end against the live API (needs a key).**
 
-The Android/Gradle side was healthy throughout — every failure was Dart-only,
-so once the Dart errors are fixed the pipeline builds again.
+## Reminder pipeline status
+Unchanged this session — `Reminder` entity is independent; `ReminderService.createAndSchedule()`
+writes the real scheduler status back and returns an honest warning suffix on failure.
 
----
+## Notification status
+Unchanged this session (ProGuard + boot receiver injected by CI; R8 enabled).
+Physical-device verification pending.
 
-## ✅ This Session — Design + Build Fix
+## APK/artifact status
+- Last green: run **#57** → release tag `build-57`, asset `app-release.apk` (53.6 MB)
+- Pending: build for HEAD (`df46175`) after push
 
-### 1. Re-themed the design system to the **MulkCare** design language
-The user asked for a look matching prior MulkCare work. Applied the MulkCare
-token set ("Coastal premium") to `lib/design/`:
+## Recovery instructions
+1. Read `.agent/IMPLEMENTATION_STATE.md` + `.agent/ARCHITECTURE_AUDIT.md`.
+2. `git log --oneline -10` and `git status`.
+3. Local check: `flutter pub get && flutter analyze && flutter test`.
+4. Push to `main` → GitHub Actions builds → release `build-<run_number>`.
+5. Continue from **Next phase: Phase 4 — Today dashboard**.
 
-- **`tokens.dart`** — new palette:
-  - Primary = deep sea blue `#084A6F` (structure) · Primary-strong `#063A55` · Primary-tint `#E4EEF4`
-  - Secondary = lagoon teal `#00A3A3` / `#0A6E75` / tint `#DFF3F3` (interaction)
-  - Accent = sun gold `#F4B400` / `#8A6400` / tint `#FDF1D4`
-  - Canvas = sea-mist `#F5F7FA` · surface `#FFFFFF` · muted `#EDF1F6` · inverse `#072F47`
-  - Border `#E2E8F0` / `#CBD5E1` · ink `#1E293B` · muted `#55657A`
-  - Semantic pairs (success/warning/danger/info) as tint-ground + strong-text
-  - Chart ramp: sea → lagoon → sun → terracotta → slate
-  - Radius scale aligned: xs 6 / sm 10 / md 14 / lg 18 (workhorse) / xl 24 / full
-  - Elevation re-tinted with the deep-sea hue (no neutral black shadows)
-- **`app_theme.dart`** — MulkCare typography scale (display 32 / h1 26 / h2 22 /
-  h3 18 / body 16 lh1.8 / label 14 lh1.6 / caption 13 lh1.7), all letterSpacing 0,
-  components (buttons/inputs/chips/nav) rebuilt on the new tokens.
-- **`widgets.dart`** — added missing `app_theme.dart` import; removed the coloured
-  start-border stripe from `AppStatusBanner` (MulkCare rule: status lives in a chip,
-  never a stripe on the card edge).
+## Next action
+Monitor CI for the build from this commit. If green, proceed to **Phase 4 — Today Dashboard**
+(operational dashboard: greeting, "يحتاج انتباه", daily summary, tasks, due payments,
+attendance issues, quick actions, AI entry point), then Phase 5 (Weekly Brief actionable).
 
-### 2. Bundled the **Tajawal** font (self-hosted, no CDN)
-`assets/fonts/Tajawal-{Regular,Medium,Bold}.ttf` + `pubspec.yaml` `fonts:` block.
-Previously `fontFamily: 'Tajawal'` resolved to a system fallback; now it is real.
-
-### 3. Fixed every compile error (see inventory above)
-- `State<_S>` → `State<ChatScreen>` / `State<SuppliersScreen>`
-- `SpeechRecognitionResult` annotation removed (inferred from callback)
-- `Positioned` → `PositionedDirectional`
-- `Employee(...)` now passes `startDate`
-- `brief_screen`: added `app_theme` import, `_navigateTo` → `void`, `_colors` getter invoked correctly
-- `settings_screen` / `notification_debug_screen`: named args + correct `BadgeKind` enum + imports
-- `widgets.dart`: import + border fix
-
-### Local verification (Flutter 3.47.7, same as CI)
-- `flutter analyze` → **0 errors** (9 info/warnings only: deprecations + unused elements)
-- `flutter build bundle` → **success** (Dart kernel compiles; `Target kernel_snapshot` OK)
-- `FontManifest.json` confirms Tajawal 400/500/700 bundled
-
----
-
-## Current HEAD / Build Status
-- **HEAD:** see `git log -1` after push (this commit)
-- **Last GREEN build:** #31
-- **Expected next:** CI build (#56+) from this commit → should be GREEN
-
-## Known Remaining Issues (non-blocking)
-- `flutter analyze` info/warnings: `localeId`/`listenMode` deprecations in chat STT,
-  `value:`→`initialValue` in rules_screen, a few unused imports/elements.
-- Physical-device tests still pending: notification delivery after reboot,
-  attendance via Chat, Brief navigation.
-
-## Database Migration Status
-Unchanged — additive JSON in SharedPreferences; no migrations needed.
-
-## AI Pipeline Status
-Working — Gemini Flash-Lite structured output; Arabic normalization in entity resolution.
-No changes to prompts or `GeminiService` this session.
-
-## Reminder / Notification Status
-ProGuard rules protect flutter_local_notifications Gson serialization; R8 minification
-explicitly enabled; boot receiver registered via CI. Physical-device verification pending.
-
-## APK/Artifact Status
-Artifact expected: GitHub Release tag `build-<run_number>` from this commit.
-Previous good artifact: build #31.
-
-## Recovery Instructions
-1. Read this file.
-2. Check HEAD: `git log --oneline -1` / `curl -H "Authorization: token $GITHUB_TOKEN" https://api.github.com/repos/moamenessamseja-web/manager-assistant-ready/git/refs/heads/main`
-3. Local analyze (optional): `flutter pub get && flutter analyze`
-4. Trigger CI: push to `main` (or `gh workflow run build-apk.yml`)
-5. Watch: `gh run list --repo moamenessamseja-web/manager-assistant-ready`
-
-## Next Action
-Monitor GitHub Actions for the build from this commit. If green, download the APK
-from the `build-<n>` release and test on a physical device.
+## Session note
+Phases 0–3 completed with commits `7ec61c7`, `a89d4bf`, `a28822f`, `df46175`.
+Remaining phases 4–13 (Today, Weekly Brief, Reminder architecture, Android notification
+reliability, AI action layer, AI+reminder integration, live queries, UX polish, regression,
+release artifact) are **not** done yet — this is a deliberate, honest pause point, not a completion.
