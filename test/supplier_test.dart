@@ -1,0 +1,123 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:manager_assistant/models/supplier.dart';
+
+/// اختبارات القبول الإلزامية (To Accio.md §2):
+/// فصل قيمة البضاعة عن الدفعات النقدية.
+void main() {
+  Supplier fresh() => Supplier(id: 'sup1', name: 'محمود', itemType: 'بن');
+
+  test('1) توريد 20 كيلو بن بـ2000 بدون دفع: البضاعة +2000 والمدفوع ثابت والمستحق +2000', () {
+    final s = fresh();
+    final before = s.totalPaid;
+    s.purchases.add(SupplierPurchase(
+      id: 'p1', item: 'بن', quantity: 20, unit: 'كيلو', unitPrice: 100, total: 2000,
+      date: DateTime(2026, 10, 1),
+    ));
+    expect(s.goodsTotal, 2000);
+    expect(s.totalPaid, before); // لا تُسجَّل دفعة
+    expect(s.totalPaid, 0);
+    expect(s.balanceDue, 2000);
+  });
+
+  test('2) توريد ثانٍ قبل سداد الأول = سجلان مستقلان', () {
+    final s = fresh();
+    s.purchases.add(SupplierPurchase(
+      id: 'p1', item: 'بن', quantity: 20, unit: 'كيلو', total: 2000, date: DateTime(2026, 10, 1),
+    ));
+    s.purchases.add(SupplierPurchase(
+      id: 'p2', item: 'لبن', quantity: 10, unit: 'لتر', total: 700, date: DateTime(2026, 10, 3),
+    ));
+    expect(s.purchases.length, 2);
+    expect(s.purchasesTotal, 2700);
+    expect(s.balanceDue, 2700);
+  });
+
+  test('3) دفع 500 فقط: المدفوع +500 والمستحق ينخفض بالحساب الصحيح', () {
+    final s = fresh();
+    s.purchases.add(SupplierPurchase(
+      id: 'p1', item: 'بن', quantity: 20, unit: 'كيلو', total: 2000, date: DateTime(2026, 10, 1),
+    ));
+    s.payments.add(SupplierPayment(id: 'pay1', amount: 500, date: DateTime(2026, 10, 4)));
+    expect(s.totalPaid, 500);
+    expect(s.goodsTotal, 2000);
+    expect(s.balanceDue, 1500);
+  });
+
+  test('4) الحفظ/الاسترجاع (JSON) يحافظ على السجلات والإجماليات', () {
+    final s = fresh();
+    s.purchases.add(SupplierPurchase(
+      id: 'p1', item: 'بن', quantity: 20, unit: 'كيلو', unitPrice: 100, total: 2000,
+      date: DateTime(2026, 10, 1), note: 'توريد الصبح',
+    ));
+    s.payments.add(SupplierPayment(id: 'pay1', amount: 500, date: DateTime(2026, 10, 4), method: 'كاش'));
+
+    final s2 = Supplier.fromJson(s.toJson());
+    expect(s2.purchases.length, 1);
+    expect(s2.payments.length, 1);
+    expect(s2.purchases.first.item, 'بن');
+    expect(s2.purchases.first.quantity, 20);
+    expect(s2.purchases.first.unit, 'كيلو');
+    expect(s2.purchases.first.unitPrice, 100);
+    expect(s2.purchases.first.total, 2000);
+    expect(s2.payments.first.method, 'كاش');
+    expect(s2.goodsTotal, 2000);
+    expect(s2.balanceDue, 1500);
+  });
+
+  test('5) توافق خلفي: مورد قديم (totalOwed=2000, مدفوع 500) يفضل شغال', () {
+    // شكل البيانات القديمة: مفيش purchases، وفيه totalOwed مختصر.
+    final legacy = Supplier.fromJson({
+      'id': 'old', 'name': 'قديم', 'itemType': 'خضار',
+      'totalOwed': 2000,
+      'payments': [{'id': 'x', 'amount': 500, 'date': '2026-09-01T10:00:00.000'}],
+      'deliveries': [],
+    });
+    expect(legacy.purchases, isEmpty);
+    expect(legacy.goodsTotal, 2000);
+    expect(legacy.totalPaid, 500);
+    expect(legacy.balanceDue, 1500);
+    expect(legacy.hasHistory, isTrue);
+  });
+
+  test('6) سعر الوحدة المستنتج: إجمالي 2000 على 20 كيلو = 100/كيلو', () {
+    final qty = 20.0;
+    final total = 2000.0;
+    final up = total / qty;
+    final p = SupplierPurchase(id: 'p', item: 'بن', quantity: qty, unit: 'كيلو', unitPrice: up, total: total, date: DateTime.now());
+    expect(p.unitPrice, 100);
+    expect(p.quantityLabel, '20 كيلو');
+    expect(p.unitPriceLabel, '100 ج/كيلو');
+  });
+
+  test('7) توزيع الدفعات FIFO: الدفعة تسدّد الأقدم أولاً', () {
+    final s = fresh();
+    s.purchases.add(SupplierPurchase(
+      id: 'p1', item: 'بن', quantity: 20, unit: 'كيلو', total: 2000, date: DateTime(2026, 10, 1),
+    ));
+    s.purchases.add(SupplierPurchase(
+      id: 'p2', item: 'لبن', quantity: 10, unit: 'لتر', total: 700, date: DateTime(2026, 10, 3),
+    ));
+    s.payments.add(SupplierPayment(id: 'pay1', amount: 2500, date: DateTime(2026, 10, 5)));
+
+    final rows = s.allocatePayments(); // مرتّبة من الأحدث للأقدم
+    final first = rows.firstWhere((r) => r.purchase?.id == 'p1'); // الأقدم
+    final second = rows.firstWhere((r) => r.purchase?.id == 'p2');
+
+    expect(first.paid, 2000); // الأقدم اتسدّد بالكامل
+    expect(first.remaining, 0);
+    expect(first.isSettled, isTrue);
+    expect(second.paid, 500); // المتبقي من الدفعة
+    expect(second.remaining, 200);
+    expect(rows.fold<double>(0, (t, r) => t + r.remaining), 200);
+    expect(rows.fold<double>(0, (t, r) => t + r.paid), s.totalPaid);
+  });
+
+  test('8) رصيد قديم مختصر يظهر كسطر بند منفصل بلا تفاصيل', () {
+    final s = Supplier(id: 'x', name: 'قديم', itemType: '', totalOwed: 1000, createdAt: DateTime(2026, 9, 1));
+    s.purchases.add(SupplierPurchase(id: 'p', item: 'بن', total: 500, date: DateTime(2026, 10, 1)));
+    final rows = s.allocatePayments();
+    expect(rows.length, 2);
+    expect(rows.any((r) => r.isLegacy && r.total == 1000), isTrue);
+    expect(rows.any((r) => !r.isLegacy && r.total == 500), isTrue);
+  });
+}
