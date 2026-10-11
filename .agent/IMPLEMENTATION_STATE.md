@@ -1,117 +1,96 @@
 # Implementation State
 
-## Session Info
-- **Agent:** Accio (root session)
-- **Started:** 2026-10-11
-- **Repository:** moamenessamseja-web/manager-assistant-ready
-- **Baseline commit:** 5067e87 (main — broken build, design refactor)
-- **Last GREEN build (user-reported):** build #31
+- **Baseline (fixed):** `main @ 2189cad` — the user-designated starting point (= build #56)
+- **Last completed work:** To Accio §2 — Supplier goods value vs cash payments
+- **Last successful commit:** `2e4835f`
+- **Last successful build:** GitHub Actions run **#60 → SUCCESS** (`build-60`, app-release.apk 53.5 MB)
+- **Last successful test:** `flutter test` → **9/9 pass** (1 legacy model + 8 supplier)
+- **Current phase:** §3 Employee file (not started)
+- **Next phase:** §3 + §5 (employee real file + record times)
 
----
+## Source of truth
+- `To Accio.md` is the only brief. `masaad_el_edara_master_implementation_brief_v2.md` is **dropped**
+  and must not be used or relied upon.
+- Builds **#57/#58 are to be treated as if they never happened.** The work they contained lives
+  in the branch `backup/phases-0-3`; `main` was force-reset to `2189cad`. Do **not** build on,
+  cherry-pick from, or trust anything in that branch without re-verifying it against `To Accio.md`.
 
-## ⚠️ Build Breakage Window (builds 32 → 55, all FAILED)
+## Independent verification already done (see `.agent/VERIFICATION_REPORT.md`)
+Re-checked the four previously claimed priority fixes against the code at `2189cad`
+(not against any report). Result: **all four are genuinely present and working** —
+do NOT rebuild them:
+| Claim | Commit | Verdict |
+|---|---|---|
+| A — notifications / ProGuard + R8 keep rules | `207cbaa` | ✅ present & correct class of fix |
+| B — Arabic normalization + `deleteSupplier` id-match fix | `1348252` | ✅ present; no "delete all" bug |
+| C — live state (`ListenableBuilder` + `AppState`) | `fbd38fd` | ✅ in 5 screens |
+| D — Weekly Brief drill-down dialogs | `fbd38fd` | ✅ present |
+| E — Memory business overview + search + timeline | `8e669cf` | ✅ present |
 
-After build #31 (green), a "premium redesign" refactor series was pushed to `main`
-(commits `ad5ff5c` → `5067e87`) that **did not compile**. All of builds 32–55 failed
-at the `flutter build apk` step with Dart compile errors (`Target kernel_snapshot_program failed`).
+## Genuine remaining gaps (from `2189cad`)
+| Ref | Gap | Status |
+|---|---|---|
+| §2 | goods value vs payments separated | ✅ **DONE** (`2e4835f`) |
+| §3 | employee real editable file (photo, payments, deductions, bonuses, notes, checkout) | ⬜ not started |
+| §5 | record times (attendance times; legacy records have dates without times) | ⬜ not started |
+| §6 | settings: theme (light/dark/system), notification prefs, persisted choices | ⬜ not started |
+| §8 | notification hardening + honest diagnostics (channel state, next fire time, IDs) | ⬜ not started |
+| §9 | resolve several names in one command | ⬜ not started |
+| §13 | audit log for financial edits / archive / delete | ⬜ not started |
+| §1 | explicit `Africa/Cairo` handling (currently device-local) | ⬜ not started |
 
-Note: the previous session wrote the design code but **never updated this file**,
-which is why the state drifted. This file is now authoritative again.
+## Files changed in this step (`2e4835f`)
+- `lib/models/supplier.dart` — `SupplierPurchase`, `PurchaseBalance`, `SupplierEvent`,
+  `purchases[]`, `goodsTotal`, `balanceDue` (= goodsTotal − paid), `allocatePayments()` (FIFO),
+  `hasHistory`, `timeline`, `createdAt`; `SupplierPayment.method` (optional)
+- `lib/services/assistant_controller.dart` — new `record_purchase`; `_appendPurchase`;
+  goods price no longer written as a payment; `mark_delivery_received` records a purchase;
+  `supplier_balance` returns a goods/paid/due breakdown
+- `lib/services/gemini_service.dart` — `purchase_*` args + explicit goods-vs-payment rule
+- `lib/design/format.dart` — NEW: Arabic money/date/time formatting
+- `lib/screens/supplier_records.dart` — NEW: supply/payment sheets, drill-down reports
+  (purchases/payments/balance) with period filters, archive, safe delete
+- `lib/screens/suppliers_screen.dart` — numbers → `goodsTotal`; overflow menu now has
+  تسجيل توريد / تسجيل دفعة / أرشفة / حذف نهائي (only when no history)
+- `lib/screens/supplier_details_screen.dart` — tappable finance tiles → reports;
+  `تسجيل توريد بقيمة` + `تقرير المستحقات`; `_hasHistory` includes purchases
+- `test/supplier_test.dart` — NEW: 8 tests incl. the 6 mandatory acceptance cases
 
-### Root causes of the build failure (complete error inventory)
-| # | File | Error |
-|---|------|-------|
-| 1 | `chat_screen.dart:15` | `class _S extends State<_S>` — wrong generic bound |
-| 2 | `suppliers_screen.dart:18` | same `State<_S>` pattern |
-| 3 | `chat_screen.dart:153` | `SpeechRecognitionResult` isn't a type |
-| 4 | `main_shell.dart:374` | `Positioned(... end: ...)` — no `end` param |
-| 5 | `staff_screen.dart:262` | `Employee(...)` missing required `startDate` |
-| 6 | `brief_screen.dart` | `AppText` undefined + `Widget _navigateTo` null return + `_colors()` invoked as method |
-| 7 | `settings_screen.dart` | `AppSectionHeader('...')` positional instead of named `title:` |
-| 8 | `notification_debug_screen.dart` | `AppBadge('...', kind: AppStatusKind.warning)` positional + wrong enum name + `AppSectionHeader` positional |
-| 9 | `design/widgets.dart` | missing `app_theme.dart` import (→ `AppText` undefined) + `Border(start:)` invalid (must be `BorderDirectional`) |
+## Known non-blocking warnings (`flutter analyze` = 0 errors)
+Pre-existing only: 2 STT deprecations (chat_screen), unused `_dayLabel` (chat_screen),
+unused import (main_shell), `value:`→`initialValue:` (rules_screen), unused `_searching`
+(staff_screen), unused import (rules_service). Deliberately untouched — no functional impact,
+and §1 says don't change what works without a specific proven need.
 
-The Android/Gradle side was healthy throughout — every failure was Dart-only,
-so once the Dart errors are fixed the pipeline builds again.
+## Database migration safety
+Additive JSON only, no destructive migration, verified by a back-compat test:
+- New supplier field `purchases[]`; legacy `totalOwed` kept as an explicit
+  "رصيد قديم (بدون تفاصيل)" opening line in the balance report.
+- Old supplier balances are numerically unchanged after upgrade (test #5).
+- Rollback: old app versions ignore unknown JSON keys → reverting the APK is safe.
 
----
+## AI pipeline status
+Updated for §2 and **not yet verified end-to-end against the live Gemini API** (needs a key):
+`record_purchase` added; purchase args added to the schema; goods-vs-payment rule in the prompt.
 
-## ✅ This Session — Design + Build Fix
+## Reminder / notification status
+Unchanged this step. ProGuard + R8 keep-rules and the boot receiver are present and were verified
+in the workflow. Physical-device delivery after reboot is still **untested**.
 
-### 1. Re-themed the design system to the **MulkCare** design language
-The user asked for a look matching prior MulkCare work. Applied the MulkCare
-token set ("Coastal premium") to `lib/design/`:
+## APK / artifact status
+- Latest: run **#60** → release tag `build-60`, asset `app-release.apk` (53.5 MB)
 
-- **`tokens.dart`** — new palette:
-  - Primary = deep sea blue `#084A6F` (structure) · Primary-strong `#063A55` · Primary-tint `#E4EEF4`
-  - Secondary = lagoon teal `#00A3A3` / `#0A6E75` / tint `#DFF3F3` (interaction)
-  - Accent = sun gold `#F4B400` / `#8A6400` / tint `#FDF1D4`
-  - Canvas = sea-mist `#F5F7FA` · surface `#FFFFFF` · muted `#EDF1F6` · inverse `#072F47`
-  - Border `#E2E8F0` / `#CBD5E1` · ink `#1E293B` · muted `#55657A`
-  - Semantic pairs (success/warning/danger/info) as tint-ground + strong-text
-  - Chart ramp: sea → lagoon → sun → terracotta → slate
-  - Radius scale aligned: xs 6 / sm 10 / md 14 / lg 18 (workhorse) / xl 24 / full
-  - Elevation re-tinted with the deep-sea hue (no neutral black shadows)
-- **`app_theme.dart`** — MulkCare typography scale (display 32 / h1 26 / h2 22 /
-  h3 18 / body 16 lh1.8 / label 14 lh1.6 / caption 13 lh1.7), all letterSpacing 0,
-  components (buttons/inputs/chips/nav) rebuilt on the new tokens.
-- **`widgets.dart`** — added missing `app_theme.dart` import; removed the coloured
-  start-border stripe from `AppStatusBanner` (MulkCare rule: status lives in a chip,
-  never a stripe on the card edge).
+## Recovery instructions
+1. Read this file, then `.agent/VERIFICATION_REPORT.md`.
+2. `git log --oneline -5` — expect `2e4835f` on top of `2189cad`.
+3. Local checks: `flutter pub get && flutter analyze && flutter test`.
+4. Push to `main` → GitHub Actions builds → release `build-<run_number>`.
+5. Continue with **§3 + §5**.
 
-### 2. Bundled the **Tajawal** font (self-hosted, no CDN)
-`assets/fonts/Tajawal-{Regular,Medium,Bold}.ttf` + `pubspec.yaml` `fonts:` block.
-Previously `fontFamily: 'Tajawal'` resolved to a system fallback; now it is real.
+## Next action
+Implement **To Accio §3** (real editable employee file) together with **§5** (real times in
+records) — they share the model — as surgical additions, then §8, §6, §9, §13.
 
-### 3. Fixed every compile error (see inventory above)
-- `State<_S>` → `State<ChatScreen>` / `State<SuppliersScreen>`
-- `SpeechRecognitionResult` annotation removed (inferred from callback)
-- `Positioned` → `PositionedDirectional`
-- `Employee(...)` now passes `startDate`
-- `brief_screen`: added `app_theme` import, `_navigateTo` → `void`, `_colors` getter invoked correctly
-- `settings_screen` / `notification_debug_screen`: named args + correct `BadgeKind` enum + imports
-- `widgets.dart`: import + border fix
-
-### Local verification (Flutter 3.47.7, same as CI)
-- `flutter analyze` → **0 errors** (9 info/warnings only: deprecations + unused elements)
-- `flutter build bundle` → **success** (Dart kernel compiles; `Target kernel_snapshot` OK)
-- `FontManifest.json` confirms Tajawal 400/500/700 bundled
-
----
-
-## Current HEAD / Build Status
-- **HEAD:** see `git log -1` after push (this commit)
-- **Last GREEN build:** #31
-- **Expected next:** CI build (#56+) from this commit → should be GREEN
-
-## Known Remaining Issues (non-blocking)
-- `flutter analyze` info/warnings: `localeId`/`listenMode` deprecations in chat STT,
-  `value:`→`initialValue` in rules_screen, a few unused imports/elements.
-- Physical-device tests still pending: notification delivery after reboot,
-  attendance via Chat, Brief navigation.
-
-## Database Migration Status
-Unchanged — additive JSON in SharedPreferences; no migrations needed.
-
-## AI Pipeline Status
-Working — Gemini Flash-Lite structured output; Arabic normalization in entity resolution.
-No changes to prompts or `GeminiService` this session.
-
-## Reminder / Notification Status
-ProGuard rules protect flutter_local_notifications Gson serialization; R8 minification
-explicitly enabled; boot receiver registered via CI. Physical-device verification pending.
-
-## APK/Artifact Status
-Artifact expected: GitHub Release tag `build-<run_number>` from this commit.
-Previous good artifact: build #31.
-
-## Recovery Instructions
-1. Read this file.
-2. Check HEAD: `git log --oneline -1` / `curl -H "Authorization: token $GITHUB_TOKEN" https://api.github.com/repos/moamenessamseja-web/manager-assistant-ready/git/refs/heads/main`
-3. Local analyze (optional): `flutter pub get && flutter analyze`
-4. Trigger CI: push to `main` (or `gh workflow run build-apk.yml`)
-5. Watch: `gh run list --repo moamenessamseja-web/manager-assistant-ready`
-
-## Next Action
-Monitor GitHub Actions for the build from this commit. If green, download the APK
-from the `build-<n>` release and test on a physical device.
+## Honest status
+§2 is complete and verified. **§3, §5, §6, §8, §9, §13 and §1-timezone are NOT done.**
+This is a deliberate, stable pause point — not a completed brief.
