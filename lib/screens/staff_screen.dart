@@ -3,6 +3,7 @@ import '../models/employee.dart';
 import '../services/storage_service.dart';
 import '../services/app_state.dart';
 import '../design/tokens.dart';
+import '../design/app_theme.dart';
 import '../design/widgets.dart';
 import 'employee_details_screen.dart';
 
@@ -262,7 +263,7 @@ class _S extends State<StaffScreen> {
                   id: DateTime.now().millisecondsSinceEpoch.toString(),
                   name: n.text.trim(),
                   role: r.text.trim(),
-                  salary: sal,
+                  salaryMonthly: sal,
                   advances: [],
                   attendance: [],
                   archived: false,
@@ -280,7 +281,7 @@ class _S extends State<StaffScreen> {
   void _editDialog(Employee e) {
     final n = TextEditingController(text: e.name);
     final r = TextEditingController(text: e.role);
-    final s = TextEditingController(text: e.salary.toStringAsFixed(0));
+    final s = TextEditingController(text: e.salaryMonthly.toStringAsFixed(0));
 
     showAppBottomSheet(
       context: context,
@@ -312,7 +313,7 @@ class _S extends State<StaffScreen> {
               onPressed: () async {
                 e.name = n.text.trim();
                 e.role = r.text.trim();
-                e.salary = double.tryParse(s.text) ?? e.salary;
+                e.salaryMonthly = double.tryParse(s.text) ?? e.salaryMonthly;
                 await StorageService.saveEmployee(e);
                 if (mounted) Navigator.pop(context);
               },
