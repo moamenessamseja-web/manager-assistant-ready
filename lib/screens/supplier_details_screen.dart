@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/supplier.dart';
 import '../services/storage_service.dart';
 import '../design/tokens.dart';
+import '../design/app_theme.dart';
 import '../design/widgets.dart';
 
 /// تفاصيل المورد — Premium Supplier Detail Screen
