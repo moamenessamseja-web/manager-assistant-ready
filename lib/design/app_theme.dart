@@ -455,15 +455,16 @@ class AppTheme {
       scaffoldBackgroundColor: bg,
       canvasColor: surface,
       cardColor: surface,
-      dialogBackgroundColor: surface,
-      textTheme: base.textTheme.apply(bodyColor: textPrimary, displayColor: textPrimary),
+      textTheme: base.textTheme
+          .apply(bodyColor: textPrimary, displayColor: textPrimary),
       appBarTheme: const AppBarTheme(
         backgroundColor: surface,
         foregroundColor: textPrimary,
         elevation: 0,
         scrolledUnderElevation: 0,
         centerTitle: false,
-        iconTheme: IconThemeData(size: AppIconSize.lg, color: AppColors.secondary),
+        iconTheme:
+            IconThemeData(size: AppIconSize.lg, color: AppColors.secondary),
         titleTextStyle: TextStyle(
           fontFamily: fontFamily,
           fontSize: 18,
@@ -485,8 +486,8 @@ class AppTheme {
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: surfaceMuted,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: AppSpace.x4, vertical: AppSpace.x4),
+        contentPadding: const EdgeInsets.symmetric(
+            horizontal: AppSpace.x4, vertical: AppSpace.x4),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AppRadius.sm),
           borderSide: const BorderSide(color: border, width: 1),
@@ -499,20 +500,25 @@ class AppTheme {
           borderRadius: BorderRadius.circular(AppRadius.sm),
           borderSide: const BorderSide(color: AppColors.secondary, width: 2),
         ),
-        hintStyle: const TextStyle(color: textSecondary, fontFamily: fontFamily),
-        labelStyle: const TextStyle(color: textSecondary, fontFamily: fontFamily),
+        hintStyle:
+            const TextStyle(color: textSecondary, fontFamily: fontFamily),
+        labelStyle:
+            const TextStyle(color: textSecondary, fontFamily: fontFamily),
       ),
       bottomSheetTheme: const BottomSheetThemeData(backgroundColor: surface),
       dialogTheme: DialogThemeData(backgroundColor: surface),
       dividerTheme: const DividerThemeData(color: border),
-      listTileTheme: const ListTileThemeData(iconColor: textSecondary, textColor: textPrimary),
+      listTileTheme: const ListTileThemeData(
+          iconColor: textSecondary, textColor: textPrimary),
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: surface,
         indicatorColor: indicator,
         labelTextStyle: WidgetStateProperty.all(
-          const TextStyle(fontFamily: fontFamily, fontSize: 12, color: textPrimary),
+          const TextStyle(
+              fontFamily: fontFamily, fontSize: 12, color: textPrimary),
         ),
-        iconTheme: WidgetStateProperty.all(const IconThemeData(color: textPrimary)),
+        iconTheme:
+            WidgetStateProperty.all(const IconThemeData(color: textPrimary)),
       ),
       chipTheme: base.chipTheme.copyWith(
         backgroundColor: surfaceMuted,
@@ -525,13 +531,15 @@ class AppTheme {
         style: OutlinedButton.styleFrom(
           foregroundColor: textPrimary,
           minimumSize: const Size(0, AppTouch.min),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.md)),
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(AppRadius.md)),
           side: const BorderSide(color: border, width: 1),
         ),
       ),
       snackBarTheme: const SnackBarThemeData(
         backgroundColor: Color(0xFF24445C),
-        contentTextStyle: TextStyle(fontFamily: fontFamily, color: Colors.white),
+        contentTextStyle:
+            TextStyle(fontFamily: fontFamily, color: Colors.white),
       ),
       progressIndicatorTheme: const ProgressIndicatorThemeData(
         color: AppColors.secondary,

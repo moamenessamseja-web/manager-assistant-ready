@@ -17,7 +17,7 @@ class ReminderOutcome {
       case 'permission_required':
         return '\n⚠️ سجلت البيانات، لكن صلاحية الإشعارات مش مفعّلة — فعّلها من الإعدادات عشان يوصلك التنبيه.';
       case 'schedule_failed':
-        return '\n⚠️ سجلت البيانات، لكن حصلت مشكلة في جدولة التنبيه. جرّب تاني من شاشة القواعد والتنبيهات.';
+        return '\n⚠️ تم تسجيل العملية بنجاح، لكن تعذر ضبط التذكير. تقدر تتابع إعدادات التنبيهات.';
       default:
         return '';
     }
@@ -47,7 +47,8 @@ class ReminderService {
     );
     await StorageService.saveReminder(r);
 
-    final res = await NotificationService.scheduleAt(r.id.hashCode, title, body, dueAt);
+    final res =
+        await NotificationService.scheduleAt(r.id.hashCode, title, body, dueAt);
     r.status = res.status;
     r.updatedAt = DateTime.now();
     await StorageService.saveReminder(r);
@@ -69,7 +70,8 @@ class ReminderService {
 
   /// إعادة محاولة جدولة تذكير فشل سابقًا (بعد منح الصلاحية مثلاً).
   static Future<ReminderOutcome> retry(Reminder r) async {
-    final res = await NotificationService.scheduleAt(r.id.hashCode, r.title, r.body, r.dueAt);
+    final res = await NotificationService.scheduleAt(
+        r.id.hashCode, r.title, r.body, r.dueAt);
     r.status = res.status;
     r.updatedAt = DateTime.now();
     await StorageService.saveReminder(r);
@@ -90,7 +92,8 @@ class ReminderService {
     for (final r in StorageService.reminders()) {
       if (!r.enabled || r.status != 'scheduled') continue;
       if (r.dueAt.isBefore(now)) continue;
-      final res = await NotificationService.scheduleAt(r.id.hashCode, r.title, r.body, r.dueAt);
+      final res = await NotificationService.scheduleAt(
+          r.id.hashCode, r.title, r.body, r.dueAt);
       if (res.status != r.status) {
         r.status = res.status;
         r.updatedAt = DateTime.now();

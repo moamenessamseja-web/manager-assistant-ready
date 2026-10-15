@@ -9,7 +9,6 @@ import 'brief_screen.dart';
 import 'settings_screen.dart';
 import 'notification_debug_screen.dart';
 import '../design/tokens.dart';
-import '../design/widgets.dart';
 import '../design/app_theme.dart';
 import '../services/app_state.dart';
 import '../services/storage_service.dart';
@@ -47,12 +46,31 @@ class _MainShellState extends State<MainShell> {
   // Tab destinations — 6 screens (تُترجم حسب اللغة المختارة §6)
   List<(String, IconData, IconData, IconData)> get _destinations => [
         (L.t('nav_today'), Icons.today_outlined, Icons.today, Icons.today),
-        (L.t('nav_chat'), Icons.chat_bubble_outline, Icons.chat_bubble, Icons.chat_bubble),
-        (L.t('nav_memory'), Icons.psychology_outlined, Icons.psychology, Icons.psychology),
-        (L.t('nav_brief'), Icons.summarize_outlined, Icons.summarize, Icons.summarize),
+        (
+          L.t('nav_chat'),
+          Icons.chat_bubble_outline,
+          Icons.chat_bubble,
+          Icons.chat_bubble
+        ),
+        (
+          L.t('nav_memory'),
+          Icons.psychology_outlined,
+          Icons.psychology,
+          Icons.psychology
+        ),
+        (
+          L.t('nav_brief'),
+          Icons.summarize_outlined,
+          Icons.summarize,
+          Icons.summarize
+        ),
         (L.t('nav_staff'), Icons.people_outline, Icons.people, Icons.people),
-        (L.t('nav_suppliers'), Icons.local_shipping_outlined, Icons.local_shipping,
-            Icons.local_shipping),
+        (
+          L.t('nav_suppliers'),
+          Icons.local_shipping_outlined,
+          Icons.local_shipping,
+          Icons.local_shipping
+        ),
       ];
 
   // Secondary screens (from drawer)
@@ -134,7 +152,8 @@ class _MainShellState extends State<MainShell> {
     return Drawer(
       backgroundColor: AppColors.surface,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.horizontal(right: Radius.circular(AppRadius.xl)),
+        borderRadius:
+            BorderRadius.horizontal(right: Radius.circular(AppRadius.xl)),
       ),
       child: SafeArea(
         child: Column(
@@ -143,7 +162,10 @@ class _MainShellState extends State<MainShell> {
             // Header
             Container(
               padding: const EdgeInsets.fromLTRB(
-                AppSpace.x6, AppSpace.x6, AppSpace.x6, AppSpace.x4,
+                AppSpace.x6,
+                AppSpace.x6,
+                AppSpace.x6,
+                AppSpace.x4,
               ),
               decoration: const BoxDecoration(
                 gradient: AppColors.primaryGradient,
@@ -170,7 +192,8 @@ class _MainShellState extends State<MainShell> {
                   const SizedBox(height: AppSpace.x3),
                   Text(
                     'مساعد الإدارة',
-                    style: AppText.h1.copyWith(color: Colors.white, fontSize: 20),
+                    style:
+                        AppText.h1.copyWith(color: Colors.white, fontSize: 20),
                   ),
                   const SizedBox(height: AppSpace.x1),
                   Text(
@@ -188,7 +211,10 @@ class _MainShellState extends State<MainShell> {
             // Primary nav is shown in bottom bar — drawer is for secondary
             Padding(
               padding: const EdgeInsets.fromLTRB(
-                AppSpace.x4, AppSpace.x3, AppSpace.x4, AppSpace.x2,
+                AppSpace.x4,
+                AppSpace.x3,
+                AppSpace.x4,
+                AppSpace.x2,
               ),
               child: Text(
                 'أدوات',
@@ -305,17 +331,15 @@ class _NavItem extends StatelessWidget {
                   vertical: AppSpace.x1,
                 ),
                 decoration: BoxDecoration(
-                  color: isSelected
-                      ? AppColors.primaryTint
-                      : Colors.transparent,
+                  color:
+                      isSelected ? AppColors.primaryTint : Colors.transparent,
                   borderRadius: BorderRadius.circular(AppRadius.full),
                 ),
                 child: Icon(
                   isSelected ? selectedIcon : icon,
                   size: AppIconSize.lg,
-                  color: isSelected
-                      ? AppColors.primary
-                      : AppColors.textDisabled,
+                  color:
+                      isSelected ? AppColors.primary : AppColors.textDisabled,
                 ),
               ),
               const SizedBox(height: 2),
@@ -325,9 +349,8 @@ class _NavItem extends StatelessWidget {
                   fontFamily: 'Tajawal',
                   fontSize: 10,
                   fontWeight: isSelected ? FontWeight.w700 : FontWeight.w400,
-                  color: isSelected
-                      ? AppColors.primary
-                      : AppColors.textDisabled,
+                  color:
+                      isSelected ? AppColors.primary : AppColors.textDisabled,
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -425,7 +448,8 @@ class _DrawerItem extends StatelessWidget {
     return ListTile(
       leading: Icon(icon, size: AppIconSize.md, color: AppColors.textSecondary),
       title: Text(label, style: AppText.body),
-      trailing: const Icon(Icons.arrow_forward, size: 16, color: AppColors.textDisabled),
+      trailing: const Icon(Icons.arrow_forward,
+          size: 16, color: AppColors.textDisabled),
       onTap: onTap,
       contentPadding: const EdgeInsets.symmetric(
         horizontal: AppSpace.x4,
@@ -437,4 +461,3 @@ class _DrawerItem extends StatelessWidget {
     );
   }
 }
-

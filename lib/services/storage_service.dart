@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/commitment.dart';
@@ -6,6 +7,7 @@ import '../models/supplier.dart';
 import '../models/rule.dart';
 import '../models/reminder.dart';
 import 'app_state.dart';
+import 'app_error_service.dart';
 
 /// تطبيع النص العربي: إزالة التشكيل، توحيد الألفات، تاء مربوطة، ياء.
 /// يُستخدم لمطابقة الأسماء في assistant_controller.dart بدل المقارنة الخام
@@ -30,38 +32,113 @@ String normalizeArabic(String value) {
       .replaceAll('ه', 'ه');
 }
 
+/// التخزين المحلي (§6).
+///
+/// قواعد السلامة المطبَّقة هنا:
+/// - **قراءة متسامحة:** سجل JSON تالف واحد لا يُسقط القائمة كلها ولا يُنهي
+///   التطبيق — يُتخطّى ويُسجَّل في سجل التشخيص، و**لا تُمسح البيانات الأصلية**.
+/// - **كتابة مُتحقَّق منها:** نجاح `setStringList` لازم يكون مؤكدًا؛ لو رجع
+///   false بنرمي [StorageException] عشان مفيش مسار يعرض نجاحًا وهميًا.
+/// - **تسلسل الكتابات:** كل عملية (قراءة → تعديل → كتابة) بتتنفّذ واحدة ورا
+///   التانية، فمافيش تعديل بيضيع لو حصلت كتابتان متزامنتان.
+///
+/// الترحيل إضافي فقط: مفاتيح JSON الجديدة بتتجاهلها النسخ الأقدم، فمفيش هدم
+/// للبيانات عند تحديث التطبيق أو الرجوع لنسخة أقدم.
 class StorageService {
   static late SharedPreferences _p;
+
+  /// عدد السجلات التالفة اللي اتخطّيناها في آخر قراءة — للتشخيص فقط.
+  static int lastCorruptCount = 0;
 
   static Future<void> init() async {
     _p = await SharedPreferences.getInstance();
   }
 
-  // ---------------- Commitments ----------------
-  static List<Commitment> commitments() => (_p.getStringList('commitments') ?? [])
-      .map((s) => Commitment.fromJson(jsonDecode(s)))
-      .toList();
+  // ═════════════════= أدوات داخلية ═════════════════
 
-  static Future<void> saveCommitment(Commitment c) async {
-    final x = commitments()
-      ..removeWhere((e) => e.id == c.id)
-      ..add(c);
-    await _p.setStringList('commitments', x.map((e) => jsonEncode(e.toJson())).toList());
-    AppState.instance.notify();
+  /// بوابة تسلسل: كل عملية كتابة بتستنى اللي قبلها تخلّص.
+  static Future<void> _gate = Future<void>.value();
+
+  static Future<T> _serialize<T>(Future<T> Function() action) {
+    final completer = Completer<T>();
+    _gate = _gate.then((_) async {
+      try {
+        completer.complete(await action());
+      } catch (e, s) {
+        completer.completeError(e, s);
+      }
+    });
+    return completer.future;
   }
+
+  /// قراءة قائمة كيانات مع تحمّل السجلات التالفة (بدون مسح أي بيانات).
+  static List<T> _read<T>(String key, T Function(Map<String, dynamic>) parse) {
+    final raw = _p.getStringList(key) ?? const <String>[];
+    final out = <T>[];
+    var corrupt = 0;
+    for (final s in raw) {
+      try {
+        final j = jsonDecode(s);
+        if (j is Map) {
+          out.add(parse(Map<String, dynamic>.from(j)));
+        } else {
+          corrupt++;
+        }
+      } catch (e) {
+        corrupt++;
+        AppErrorService.log('storage.read($key)', e);
+      }
+    }
+    lastCorruptCount = corrupt;
+    if (corrupt > 0) {
+      AppErrorService.log(
+        'storage.read($key)',
+        'تخطّينا $corrupt سجلًا تالفًا من أصل ${raw.length} — البيانات الأصلية لم تُمسح.',
+      );
+    }
+    return out;
+  }
+
+  /// كتابة قائمة مؤكدة — ترمي [StorageException] لو الحفظ فشل.
+  static Future<void> _write(String key, List<String> values) async {
+    bool ok;
+    try {
+      ok = await _p.setStringList(key, values);
+    } catch (e, s) {
+      AppErrorService.log('storage.write($key)', e, s);
+      throw StorageException('فشل حفظ البيانات ($key)', e);
+    }
+    if (!ok) {
+      AppErrorService.log('storage.write($key)', 'setStringList رجع false');
+      throw StorageException('فشل حفظ البيانات ($key)');
+    }
+  }
+
+  // ---------------- Commitments ----------------
+  static List<Commitment> commitments() =>
+      _read('commitments', (j) => Commitment.fromJson(j));
+
+  static Future<void> saveCommitment(Commitment c) => _serialize(() async {
+        final x = commitments()
+          ..removeWhere((e) => e.id == c.id)
+          ..add(c);
+        await _write(
+            'commitments', x.map((e) => jsonEncode(e.toJson())).toList());
+        AppState.instance.notify();
+      });
 
   // ---------------- Employees ----------------
-  static List<Employee> employees() => (_p.getStringList('employees') ?? [])
-      .map((s) => Employee.fromJson(jsonDecode(s)))
-      .toList();
+  static List<Employee> employees() =>
+      _read('employees', (j) => Employee.fromJson(j));
 
-  static Future<void> saveEmployee(Employee e) async {
-    final x = employees()
-      ..removeWhere((a) => a.id == e.id)
-      ..add(e);
-    await _p.setStringList('employees', x.map((a) => jsonEncode(a.toJson())).toList());
-    AppState.instance.notify();
-  }
+  static Future<void> saveEmployee(Employee e) => _serialize(() async {
+        final x = employees()
+          ..removeWhere((a) => a.id == e.id)
+          ..add(e);
+        await _write(
+            'employees', x.map((a) => jsonEncode(a.toJson())).toList());
+        AppState.instance.notify();
+      });
 
   /// البحث عن موظف بالاسم — يستخدم المطابقة الطبيعية لتجاوز اختلافات التشكيل.
   static Employee? findEmployee(String name) {
@@ -74,15 +151,15 @@ class StorageService {
     return null;
   }
 
+  static Future<void> deleteEmployee(String id) => _serialize(() async {
+        final x = employees()..removeWhere((e) => e.id == id);
+        await _write(
+            'employees', x.map((e) => jsonEncode(e.toJson())).toList());
+        AppState.instance.notify();
+      });
+
   /// كل الموظفين اللي اسمهم يطابق الاسم المذكور — تُستخدم لاكتشاف الالتباس
   /// (أكتر من موظف بنفس الاسم) بدل تخمين الأول اللي يتطابق.
-  /// تستخدم المطابقة الطبيعية لتفادي فشل المطابقة بسبب التشكيل.
-  static Future<void> deleteEmployee(String id) async {
-    final x = employees()..removeWhere((e) => e.id == id);
-    await _p.setStringList('employees', x.map((e) => jsonEncode(e.toJson())).toList());
-    AppState.instance.notify();
-  }
-
   static List<Employee> employeesMatching(String name) {
     if (name.trim().isEmpty) return [];
     final normalized = normalizeArabic(name);
@@ -93,17 +170,17 @@ class StorageService {
   }
 
   // ---------------- Suppliers ----------------
-  static List<Supplier> suppliers() => (_p.getStringList('suppliers') ?? [])
-      .map((s) => Supplier.fromJson(jsonDecode(s)))
-      .toList();
+  static List<Supplier> suppliers() =>
+      _read('suppliers', (j) => Supplier.fromJson(j));
 
-  static Future<void> saveSupplier(Supplier s) async {
-    final x = suppliers()
-      ..removeWhere((a) => a.id == s.id)
-      ..add(s);
-    await _p.setStringList('suppliers', x.map((a) => jsonEncode(a.toJson())).toList());
-    AppState.instance.notify();
-  }
+  static Future<void> saveSupplier(Supplier s) => _serialize(() async {
+        final x = suppliers()
+          ..removeWhere((a) => a.id == s.id)
+          ..add(s);
+        await _write(
+            'suppliers', x.map((a) => jsonEncode(a.toJson())).toList());
+        AppState.instance.notify();
+      });
 
   /// البحث عن مورد بالاسم — يستخدم المطابقة الطبيعية.
   static Supplier? findSupplier(String name) {
@@ -116,11 +193,12 @@ class StorageService {
     return null;
   }
 
-  static Future<void> deleteSupplier(String id) async {
-    final x = suppliers()..removeWhere((s) => s.id == id);
-    await _p.setStringList('suppliers', x.map((s) => jsonEncode(s.toJson())).toList());
-    AppState.instance.notify();
-  }
+  static Future<void> deleteSupplier(String id) => _serialize(() async {
+        final x = suppliers()..removeWhere((s) => s.id == id);
+        await _write(
+            'suppliers', x.map((s) => jsonEncode(s.toJson())).toList());
+        AppState.instance.notify();
+      });
 
   static List<Supplier> suppliersMatching(String name) {
     if (name.trim().isEmpty) return [];
@@ -132,47 +210,53 @@ class StorageService {
   }
 
   // ---------------- Rules ----------------
-  static List<FollowUpRule> rules() => (_p.getStringList('rules') ?? [])
-      .map((s) => FollowUpRule.fromJson(jsonDecode(s)))
-      .toList();
+  static List<FollowUpRule> rules() =>
+      _read('rules', (j) => FollowUpRule.fromJson(j));
 
-  static Future<void> saveRule(FollowUpRule r) async {
-    final x = rules()
-      ..removeWhere((a) => a.id == r.id)
-      ..add(r);
-    await _p.setStringList('rules', x.map((a) => jsonEncode(a.toJson())).toList());
-    AppState.instance.notify();
-  }
+  static Future<void> saveRule(FollowUpRule r) => _serialize(() async {
+        final x = rules()
+          ..removeWhere((a) => a.id == r.id)
+          ..add(r);
+        await _write('rules', x.map((a) => jsonEncode(a.toJson())).toList());
+        AppState.instance.notify();
+      });
 
-  static Future<void> deleteRule(String id) async {
-    final x = rules()..removeWhere((a) => a.id == id);
-    await _p.setStringList('rules', x.map((a) => jsonEncode(a.toJson())).toList());
-    AppState.instance.notify();
-  }
+  static Future<void> deleteRule(String id) => _serialize(() async {
+        final x = rules()..removeWhere((a) => a.id == id);
+        await _write('rules', x.map((a) => jsonEncode(a.toJson())).toList());
+        AppState.instance.notify();
+      });
 
   // ---------------- Reminders (Reminder entity — مستقلة عن Task/Commitment) ----------------
-  static List<Reminder> reminders() => (_p.getStringList('reminders') ?? [])
-      .map((s) => Reminder.fromJson(jsonDecode(s)))
-      .toList();
+  static List<Reminder> reminders() =>
+      _read('reminders', (j) => Reminder.fromJson(j));
 
-  static Future<void> saveReminder(Reminder r) async {
-    final x = reminders()
-      ..removeWhere((a) => a.id == r.id)
-      ..add(r);
-    await _p.setStringList('reminders', x.map((a) => jsonEncode(a.toJson())).toList());
-    AppState.instance.notify();
-  }
+  static Future<void> saveReminder(Reminder r) => _serialize(() async {
+        final x = reminders()
+          ..removeWhere((a) => a.id == r.id)
+          ..add(r);
+        await _write(
+            'reminders', x.map((a) => jsonEncode(a.toJson())).toList());
+        AppState.instance.notify();
+      });
 
-  static Future<void> deleteReminder(String id) async {
-    final x = reminders()..removeWhere((a) => a.id == id);
-    await _p.setStringList('reminders', x.map((a) => jsonEncode(a.toJson())).toList());
-    AppState.instance.notify();
-  }
+  static Future<void> deleteReminder(String id) => _serialize(() async {
+        final x = reminders()..removeWhere((a) => a.id == id);
+        await _write(
+            'reminders', x.map((a) => jsonEncode(a.toJson())).toList());
+        AppState.instance.notify();
+      });
 
   static List<Reminder> remindersForEntity(String entityId) =>
       reminders().where((r) => r.relatedEntityId == entityId).toList();
 
   // ---------------- Settings ----------------
+  /// مفتاح الخدمة الإضافية الاختيارية. فاضي افتراضيًا، ومفيش أي حقل في
+  /// واجهة المستخدم لإدخاله (§9). وجوده هنا فقط للمسار الاختياري.
   static String get apiKey => _p.getString('gemini_api_key') ?? '';
-  static Future<void> setApiKey(String v) => _p.setString('gemini_api_key', v);
+
+  static Future<void> setApiKey(String v) => _serialize(() async {
+        final ok = await _p.setString('gemini_api_key', v);
+        if (!ok) throw StorageException('فشل حفظ الإعداد (gemini_api_key)');
+      });
 }

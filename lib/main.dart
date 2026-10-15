@@ -6,6 +6,8 @@ import 'services/rules_service.dart';
 import 'services/reminder_service.dart';
 import 'services/app_state.dart';
 import 'services/settings_service.dart';
+import 'services/app_error_service.dart';
+import 'services/chat_history_service.dart';
 import 'screens/main_shell.dart';
 import 'design/app_theme.dart';
 import 'design/strings.dart';
@@ -13,12 +15,20 @@ import 'design/strings.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await StorageService.init();
+  await AppErrorService.init();
+  await ChatHistoryService.init();
   await SettingsService.init();
   tz.initializeTimeZones();
-  await NotificationService.init();
-  await NotificationService.requestPermission();
-  await ReminderService.rescheduleAllActive();
-  await RulesService.checkAndTrigger();
+  // بدء خدمات التنبيهات — أي فشل هنا لا يمنع فتح التطبيق ولا يعطّل أي عملية
+  // محلية، والتفاصيل التقنية تُسجَّل محليًا فقط (§6/§8).
+  try {
+    await NotificationService.init();
+    await NotificationService.requestPermission();
+    await ReminderService.rescheduleAllActive();
+    await RulesService.checkAndTrigger();
+  } catch (e, st) {
+    AppErrorService.log('startup', e, st);
+  }
   runApp(const ManagerApp());
 }
 

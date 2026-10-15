@@ -8,6 +8,7 @@ import 'storage_service.dart';
 import 'reminder_service.dart';
 import 'local_command_parser.dart';
 import 'conversation_context_service.dart';
+import 'app_error_service.dart';
 import '../design/format.dart';
 
 /// نتيجة البحث عن كيان (موظف/مورد) بالاسم — بتميّز صراحة بين:
@@ -83,7 +84,7 @@ class AssistantController {
       if (ids.length > 1) {
         for (final id in ids) {
           final one = Map<String, dynamic>.from(fields)..['person_id'] = id;
-          results.add(await _dispatch(intent, one, text));
+          results.add(await _safeDispatch(intent, one, text));
         }
       } else {
         for (final name in people) {
@@ -91,7 +92,7 @@ class AssistantController {
             ..['person'] = name
             ..['employee_name'] = name
             ..['people'] = <String>[];
-          results.add(await _dispatch(intent, one, text));
+          results.add(await _safeDispatch(intent, one, text));
         }
       }
       await ConversationContextService.clearPending();
@@ -115,7 +116,7 @@ class AssistantController {
       return clarification ?? _askFor(missing);
     }
     await ConversationContextService.clearPending();
-    return _dispatch(intent, fields, text);
+    return _safeDispatch(intent, fields, text);
   }
 
   /// مسار Gemini القديم — أصبح اختياريًا بالكامل. يرجع null لو ما فهمش.
@@ -241,7 +242,7 @@ class AssistantController {
         final still = p.missing.where((k) => !_hasVal(merged[k])).toList();
         if (still.isEmpty) {
           await ConversationContextService.clearPending();
-          return _dispatch(p.intent, {'intent': p.intent, ...merged}, text);
+          return _safeDispatch(p.intent, {'intent': p.intent, ...merged}, text);
         }
         await ConversationContextService.setPending(
             p.copyWith(fields: merged, missing: still));
@@ -267,7 +268,7 @@ class AssistantController {
     final still = p.missing.where((k) => !_hasVal(merged[k])).toList();
     if (still.isEmpty) {
       await ConversationContextService.clearPending();
-      return _dispatch(p.intent, {'intent': p.intent, ...merged}, text);
+      return _safeDispatch(p.intent, {'intent': p.intent, ...merged}, text);
     }
     await ConversationContextService.setPending(
         p.copyWith(fields: merged, missing: still));
@@ -426,6 +427,18 @@ class AssistantController {
     'add_employee',
     'create_commitment',
   };
+
+  /// تنفيذ آمن — أي استثناء (زي فشل الحفظ) يتحوّل لرسالة عربية واضحة،
+  /// ومفيش نص استثناء خام ولا تفاصيل داخلية بتوصل للمستخدم (§8).
+  static Future<String> _safeDispatch(
+      String intent, Map<String, dynamic> d, String text) async {
+    try {
+      return await _dispatch(intent, d, text);
+    } catch (e, st) {
+      AppErrorService.log('dispatch.$intent', e, st);
+      return AppErrorService.userMessage(e);
+    }
+  }
 
   static Future<String> _dispatch(
       String intent, Map<String, dynamic> d, String text) async {

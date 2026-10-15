@@ -26,13 +26,22 @@ class _RulesScreenState extends State<RulesScreen> {
             )
           : ListView(
               children: rules.map((r) {
-                final freqAr = {'monthly': 'شهرية', 'weekly': 'أسبوعية', 'daily': 'يومية'}[r.frequency] ?? r.frequency;
+                final freqAr = {
+                      'monthly': 'شهرية',
+                      'weekly': 'أسبوعية',
+                      'daily': 'يومية'
+                    }[r.frequency] ??
+                    r.frequency;
                 return Card(
-                  margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  margin:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   child: ListTile(
-                    leading: Icon(r.active ? Icons.notifications_active : Icons.notifications_off),
+                    leading: Icon(r.active
+                        ? Icons.notifications_active
+                        : Icons.notifications_off),
                     title: Text(r.text),
-                    subtitle: Text('$freqAr — القادمة: ${arabicDateTime(r.nextDue)}'),
+                    subtitle:
+                        Text('$freqAr — القادمة: ${arabicDateTime(r.nextDue)}'),
                     trailing: Row(mainAxisSize: MainAxisSize.min, children: [
                       Switch(
                         value: r.active,
@@ -54,7 +63,8 @@ class _RulesScreenState extends State<RulesScreen> {
                 );
               }).toList(),
             ),
-      floatingActionButton: FloatingActionButton(onPressed: _addRule, child: const Icon(Icons.add_alarm)),
+      floatingActionButton: FloatingActionButton(
+          onPressed: _addRule, child: const Icon(Icons.add_alarm)),
     );
   }
 
@@ -69,10 +79,17 @@ class _RulesScreenState extends State<RulesScreen> {
         builder: (ctx, setD) => AlertDialog(
           title: const Text('قاعدة متابعة جديدة'),
           content: Column(mainAxisSize: MainAxisSize.min, children: [
-            TextField(controller: text, decoration: const InputDecoration(labelText: 'نص القاعدة (مثل: فكرني بالإيجار)')),
-            TextField(controller: amount, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'المبلغ (اختياري)')),
+            TextField(
+                controller: text,
+                decoration: const InputDecoration(
+                    labelText: 'نص القاعدة (مثل: فكرني بالإيجار)')),
+            TextField(
+                controller: amount,
+                keyboardType: TextInputType.number,
+                decoration:
+                    const InputDecoration(labelText: 'المبلغ (اختياري)')),
             DropdownButtonFormField<String>(
-              value: _freq,
+              initialValue: _freq,
               items: const [
                 DropdownMenuItem(value: 'monthly', child: Text('شهرية')),
                 DropdownMenuItem(value: 'weekly', child: Text('أسبوعية')),
@@ -85,7 +102,10 @@ class _RulesScreenState extends State<RulesScreen> {
               TextField(
                 controller: anchor,
                 keyboardType: TextInputType.number,
-                decoration: InputDecoration(labelText: _freq == 'monthly' ? 'يوم الشهر (1-31)' : 'يوم الأسبوع (1=إثنين..7=أحد)'),
+                decoration: InputDecoration(
+                    labelText: _freq == 'monthly'
+                        ? 'يوم الشهر (1-31)'
+                        : 'يوم الأسبوع (1=إثنين..7=أحد)'),
               ),
           ]),
           actions: [
@@ -97,9 +117,11 @@ class _RulesScreenState extends State<RulesScreen> {
                 DateTime next;
                 if (_freq == 'weekly') {
                   final addDays = (a - now.weekday) % 7;
-                  next = DateTime(now.year, now.month, now.day, 9).add(Duration(days: addDays == 0 ? 7 : addDays));
+                  next = DateTime(now.year, now.month, now.day, 9)
+                      .add(Duration(days: addDays == 0 ? 7 : addDays));
                 } else if (_freq == 'daily') {
-                  next = DateTime(now.year, now.month, now.day, 9).add(const Duration(days: 1));
+                  next = DateTime(now.year, now.month, now.day, 9)
+                      .add(const Duration(days: 1));
                 } else {
                   var y = now.year, m = now.month;
                   if (now.day >= a) {

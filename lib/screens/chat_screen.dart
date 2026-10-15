@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:speech_to_text/speech_to_text.dart';
+import 'package:uuid/uuid.dart';
 import '../services/assistant_controller.dart';
+import '../services/chat_history_service.dart';
+import '../services/app_error_service.dart';
 import '../design/tokens.dart';
 import '../design/app_theme.dart';
 
@@ -18,38 +21,52 @@ class _S extends State<ChatScreen> {
   final _stt = SpeechToText();
   bool _busy = false;
   bool _listening = false;
-  String _lastWords = '';
+
+  /// يمنع إرسال النص الصوتي مرتين لنفس جلسة التسجيل (§7).
+  bool _voiceSent = false;
   String? _errorMsg;
-  final _msgs = <_Msg>[];
+  final _msgs = <ChatMessage>[];
 
   @override
   void initState() {
     super.initState();
+    _loadHistory();
     _initStt();
+  }
+
+  /// استعادة الرسائل المحفوظة عند فتح الشاشة (§7).
+  Future<void> _loadHistory() async {
+    await ChatHistoryService.init();
+    final saved = ChatHistoryService.all();
+    if (!mounted) return;
+    setState(() {
+      _msgs
+        ..clear()
+        ..addAll(saved);
+    });
+    _scrollToBottom();
   }
 
   Future<void> _initStt() async {
     final ok = await _stt.initialize(
       onError: (err) {
+        if (!mounted) return;
         setState(() {
           _listening = false;
           _errorMsg = _parseError(err);
         });
         if (_errorMsg != null) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(_errorMsg!), backgroundColor: AppColors.danger),
+            SnackBar(
+                content: Text(_errorMsg!), backgroundColor: AppColors.danger),
           );
         }
       },
       onStatus: (s) {
+        // الإرسال بقى من onResult فقط — تغيير حالة التسجيل لا يُسقط أمرًا
+        // ولا يُرسل النص مرتين.
         if (s == 'done' || s == 'notListening') {
-          if (_lastWords.isNotEmpty) {
-            _send(_lastWords);
-          }
-          setState(() {
-            _listening = false;
-            _lastWords = '';
-          });
+          if (mounted) setState(() => _listening = false);
         }
       },
     );
@@ -83,37 +100,78 @@ class _S extends State<ChatScreen> {
     super.dispose();
   }
 
-  Future<void> _send(String text) async {
-    final t = text.trim();
+  /// إرسال رسالة — محمي من الإرسال المزدوج، ورسالة المستخدم لا تُفقد أبدًا
+  /// حتى لو فشلت العملية (§7)، وأي خطأ يظهر كرسالة عربية مفهومة (§8).
+  Future<void> _send(String rawText) async {
+    final t = rawText.trim();
     if (t.isEmpty || _busy) return;
+    _busy = true;
 
-    final now = DateTime.now();
-    final dayKey = _dayKey(now);
+    final userMsg = ChatMessage(
+      id: const Uuid().v4(),
+      role: ChatRole.user,
+      text: t,
+      time: DateTime.now(),
+    );
+    final statusMsg = ChatMessage(
+      id: const Uuid().v4(),
+      role: ChatRole.status,
+      text: 'جارٍ التنفيذ…',
+      time: DateTime.now(),
+    );
+
     setState(() {
-      _msgs.add(_Msg(role: 'user', text: t, time: now, dayKey: dayKey));
-      _busy = true;
+      _msgs.add(userMsg);
+      _msgs.add(statusMsg);
       _text.clear();
     });
     _scrollToBottom();
 
+    // نحفظ رسالة المستخدم فورًا — مش بتضيع لو العملية فشلت.
     try {
-      final reply = await AssistantController.handle(t);
-      if (!mounted) return;
-      final replyTime = DateTime.now();
-      final replyDay = _dayKey(replyTime);
-      setState(() {
-        _msgs.add(_Msg(role: 'assistant', text: reply, time: replyTime, dayKey: replyDay));
-        _busy = false;
-      });
-      _scrollToBottom();
-    } catch (e) {
-      if (!mounted) return;
-      final errTime = DateTime.now();
-      setState(() {
-        _msgs.add(_Msg(role: 'assistant', text: '❌ $e', time: errTime, dayKey: _dayKey(errTime)));
-        _busy = false;
-      });
+      await ChatHistoryService.append(userMsg);
+    } catch (e, st) {
+      AppErrorService.log('chat.saveUser', e, st);
     }
+
+    String reply;
+    try {
+      reply = await AssistantController.handle(t);
+    } catch (e, st) {
+      AppErrorService.log('chat.handle', e, st);
+      reply = AppErrorService.userMessage(e);
+    }
+
+    if (!mounted) return;
+    final out = ChatMessage(
+      id: const Uuid().v4(),
+      role: ChatRole.assistant,
+      text: reply,
+      time: DateTime.now(),
+    );
+    setState(() {
+      _msgs.removeWhere((m) => m.id == statusMsg.id);
+      _msgs.add(out);
+      _busy = false;
+    });
+    _scrollToBottom();
+
+    try {
+      await ChatHistoryService.append(out);
+    } catch (e, st) {
+      AppErrorService.log('chat.saveReply', e, st);
+    }
+  }
+
+  /// مسح سجل المحادثة — بطلب صريح من المستخدم (§4).
+  Future<void> _clearHistory() async {
+    try {
+      await ChatHistoryService.clear();
+    } catch (e, st) {
+      AppErrorService.log('chat.clearHistory', e, st);
+    }
+    if (!mounted) return;
+    setState(() => _msgs.clear());
   }
 
   Future<void> _toggleListen() async {
@@ -133,9 +191,11 @@ class _S extends State<ChatScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text('المصوت غير متاح على جهازك، تحقق من إعدادات الجهاز'),
+            content:
+                const Text('المصوت غير متاح على جهازك، تحقق من إعدادات الجهاز'),
             backgroundColor: AppColors.danger,
-            action: SnackBarAction(label: 'حسنًا', textColor: Colors.white, onPressed: () {}),
+            action: SnackBarAction(
+                label: 'حسنًا', textColor: Colors.white, onPressed: () {}),
           ),
         );
       }
@@ -145,31 +205,24 @@ class _S extends State<ChatScreen> {
     setState(() {
       _listening = true;
       _errorMsg = null;
+      _voiceSent = false;
     });
 
     await _stt.listen(
-      localeId: 'ar_EG',
-      listenMode: ListenMode.confirmation,
+      listenOptions: SpeechListenOptions(
+        localeId: 'ar_EG',
+        listenMode: ListenMode.confirmation,
+      ),
       onResult: (r) {
-        if (r.finalResult) {
-          setState(() => _lastWords = r.recognizedWords);
-        }
+        if (!r.finalResult) return;
+        final words = r.recognizedWords.trim();
+        // نعرض النص المسموع للمستخدم ثم نرسله **مرة واحدة فقط** (§7).
+        if (words.isEmpty || _voiceSent || _busy) return;
+        _voiceSent = true;
+        setState(() => _text.text = words);
+        _send(words);
       },
     );
-  }
-
-  String _dayKey(DateTime d) =>
-      DateTime(d.year, d.month, d.day).toIso8601String().substring(0, 10);
-
-  String _dayLabel(String key) {
-    final parts = key.split('-');
-    final d = DateTime(int.parse(parts[0]), int.parse(parts[1]), int.parse(parts[2]));
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final yesterday = today.subtract(const Duration(days: 1));
-    if (d == today) return 'اليوم';
-    if (d == yesterday) return 'أمس';
-    return '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
   }
 
   void _scrollToBottom() {
@@ -213,13 +266,24 @@ class _S extends State<ChatScreen> {
               padding: const EdgeInsetsDirectional.only(end: AppSpace.x2),
               child: _PulsingMic(),
             ),
+          PopupMenuButton<String>(
+            tooltip: 'خيارات المحادثة',
+            onSelected: (v) {
+              if (v == 'clear') _clearHistory();
+            },
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: 'clear', child: Text('مسح المحادثة')),
+            ],
+          ),
         ],
       ),
       body: Column(
         children: [
           // Messages
           Expanded(
-            child: _msgs.isEmpty ? _EmptyState() : _MessagesList(msgs: _msgs, scroll: _scroll),
+            child: _msgs.isEmpty
+                ? _EmptyState()
+                : _MessagesList(msgs: _msgs, scroll: _scroll),
           ),
 
           // Loading bar
@@ -244,24 +308,9 @@ class _S extends State<ChatScreen> {
   }
 }
 
-/// Message data
-class _Msg {
-  final String role; // 'user' | 'assistant'
-  final String text;
-  final DateTime time;
-  final String dayKey;
-
-  _Msg({
-    required this.role,
-    required this.text,
-    required this.time,
-    required this.dayKey,
-  });
-}
-
 /// Messages list with date separators
 class _MessagesList extends StatelessWidget {
-  final List<_Msg> msgs;
+  final List<ChatMessage> msgs;
   final ScrollController scroll;
 
   const _MessagesList({required this.msgs, required this.scroll});
@@ -283,13 +332,16 @@ class _MessagesList extends StatelessWidget {
     return ListView(
       controller: scroll,
       padding: const EdgeInsets.fromLTRB(
-        AppSpace.x3, AppSpace.x2, AppSpace.x3, AppSpace.x2,
+        AppSpace.x3,
+        AppSpace.x2,
+        AppSpace.x3,
+        AppSpace.x2,
       ),
       children: items,
     );
   }
 
-  bool _isSameDayAndRole(List<_Msg> msgs, int i) {
+  bool _isSameDayAndRole(List<ChatMessage> msgs, int i) {
     if (i == msgs.length - 1) return false;
     final curr = msgs[i];
     final next = msgs[i + 1];
@@ -299,7 +351,8 @@ class _MessagesList extends StatelessWidget {
 
 String _dayLabel(String key) {
   final parts = key.split('-');
-  final d = DateTime(int.parse(parts[0]), int.parse(parts[1]), int.parse(parts[2]));
+  final d =
+      DateTime(int.parse(parts[0]), int.parse(parts[1]), int.parse(parts[2]));
   final now = DateTime.now();
   final today = DateTime(now.year, now.month, now.day);
   final yesterday = today.subtract(const Duration(days: 1));
@@ -344,7 +397,7 @@ class _DateSeparator extends StatelessWidget {
 
 /// Chat bubble
 class _Bubble extends StatelessWidget {
-  final _Msg msg;
+  final ChatMessage msg;
   final bool showTail;
 
   const _Bubble({required this.msg, required this.showTail});
@@ -354,7 +407,30 @@ class _Bubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isUser = msg.role == 'user';
+    // رسالة حالة (جارٍ التنفيذ…) — pill متوسط ومكتوم.
+    if (msg.role == ChatRole.status) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: AppSpace.x2),
+        child: Center(
+          child: Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpace.x3,
+              vertical: AppSpace.x1,
+            ),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceMuted,
+              borderRadius: BorderRadius.circular(AppRadius.full),
+            ),
+            child: Text(
+              msg.text,
+              style: AppText.caption.copyWith(color: AppColors.textSecondary),
+            ),
+          ),
+        ),
+      );
+    }
+
+    final isUser = msg.role == ChatRole.user;
 
     // User bubble: teal bg, white text, right-aligned
     // Assistant bubble: white bg, dark text, left-aligned
@@ -383,7 +459,8 @@ class _Bubble extends StatelessWidget {
                     // Bottom-start: rounded if same-side-as-top is rounded (user), else sharp
                     bottomStart: Radius.circular(showTail ? AppRadius.lg : 0),
                     // Bottom-end: rounded if same-side-as-top is rounded (assistant), else sharp
-                    bottomEnd: Radius.circular(showTail ? (isUser ? 0 : AppRadius.lg) : 0),
+                    bottomEnd: Radius.circular(
+                        showTail ? (isUser ? 0 : AppRadius.lg) : 0),
                   ),
                   boxShadow: [
                     BoxShadow(
@@ -452,7 +529,10 @@ class _InputBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.fromLTRB(
-        AppSpace.x3, AppSpace.x2, AppSpace.x3, AppSpace.x3,
+        AppSpace.x3,
+        AppSpace.x2,
+        AppSpace.x3,
+        AppSpace.x3,
       ),
       decoration: const BoxDecoration(
         color: AppColors.surface,
@@ -520,7 +600,8 @@ class _InputBar extends StatelessWidget {
                       maxLines: 4,
                       minLines: 1,
                       textInputAction: TextInputAction.newline,
-                      style: const TextStyle(fontFamily: 'Tajawal', fontSize: 15),
+                      style:
+                          const TextStyle(fontFamily: 'Tajawal', fontSize: 15),
                       decoration: InputDecoration(
                         hintText: busy ? 'جارٍ الرد...' : 'اكتب ما تريد...',
                         hintStyle: const TextStyle(
@@ -587,7 +668,9 @@ class _MicButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final enabled = !busy;
-    final color = listening ? AppColors.danger : (enabled ? AppColors.primary : AppColors.textDisabled);
+    final color = listening
+        ? AppColors.danger
+        : (enabled ? AppColors.primary : AppColors.textDisabled);
 
     return Material(
       color: color.withValues(alpha: 0.1),

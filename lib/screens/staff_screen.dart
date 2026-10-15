@@ -19,7 +19,6 @@ class StaffScreen extends StatefulWidget {
 class _S extends State<StaffScreen> {
   String _filter = 'active';
   final _search = TextEditingController();
-  bool _searching = false;
 
   @override
   void dispose() {
@@ -45,7 +44,9 @@ class _S extends State<StaffScreen> {
 
   Widget _buildBody(BuildContext context) {
     final now = DateTime.now();
-    final todayStr = DateTime(now.year, now.month, now.day).toIso8601String().substring(0, 10);
+    final todayStr = DateTime(now.year, now.month, now.day)
+        .toIso8601String()
+        .substring(0, 10);
 
     final all = StorageService.employees();
     final filtered = switch (_filter) {
@@ -60,7 +61,8 @@ class _S extends State<StaffScreen> {
         : filtered.where((e) => e.name.toLowerCase().contains(query)).toList();
 
     final active = all.where((e) => !e.archived).toList();
-    final attendedToday = active.where((e) => e.attendance.contains(todayStr)).length;
+    final attendedToday =
+        active.where((e) => e.attendance.contains(todayStr)).length;
     final totalAdvances = active.fold<double>(0, (s, e) => s + e.totalAdvances);
     final totalDue = active.fold<double>(0, (s, e) => s + e.remainingSalary);
 
@@ -88,7 +90,9 @@ class _S extends State<StaffScreen> {
                     label: 'إجمالي السلف',
                     value: '${totalAdvances.toStringAsFixed(0)} ج',
                     icon: Icons.account_balance_wallet_outlined,
-                    color: totalAdvances > 0 ? AppColors.warning : AppColors.textSecondary,
+                    color: totalAdvances > 0
+                        ? AppColors.warning
+                        : AppColors.textSecondary,
                   ),
                 ),
                 const SizedBox(width: AppSpace.x3),
@@ -109,7 +113,10 @@ class _S extends State<StaffScreen> {
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(
-              AppSpace.x4, 0, AppSpace.x4, AppSpace.x3,
+              AppSpace.x4,
+              0,
+              AppSpace.x4,
+              AppSpace.x3,
             ),
             child: TextField(
               controller: _search,
@@ -136,7 +143,10 @@ class _S extends State<StaffScreen> {
           child: SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.fromLTRB(
-              AppSpace.x4, 0, AppSpace.x4, AppSpace.x3,
+              AppSpace.x4,
+              0,
+              AppSpace.x4,
+              AppSpace.x3,
             ),
             child: Row(
               children: [
@@ -171,7 +181,8 @@ class _S extends State<StaffScreen> {
             hasScrollBody: false,
             child: AppEmptyState(
               icon: Icons.people_outline,
-              title: _search.text.isNotEmpty ? 'لا يوجد نتائج' : 'لا يوجد موظفون',
+              title:
+                  _search.text.isNotEmpty ? 'لا يوجد نتائج' : 'لا يوجد موظفون',
               subtitle: _search.text.isNotEmpty
                   ? 'ابحث باسم مختلف'
                   : 'مثال: "أحمد بدأ شغل يوم 4 ومرتبه 4000"',
@@ -180,7 +191,10 @@ class _S extends State<StaffScreen> {
         else
           SliverPadding(
             padding: const EdgeInsets.fromLTRB(
-              AppSpace.x4, 0, AppSpace.x4, AppSpace.x16,
+              AppSpace.x4,
+              0,
+              AppSpace.x4,
+              AppSpace.x16,
             ),
             sliver: SliverList(
               delegate: SliverChildBuilderDelegate(
@@ -190,7 +204,8 @@ class _S extends State<StaffScreen> {
                   onTap: () => Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (_) => EmployeeDetailsScreen(employee: employees[i]),
+                      builder: (_) =>
+                          EmployeeDetailsScreen(employee: employees[i]),
                     ),
                   ).then((_) => setState(() {})),
                   onEdit: () => _editDialog(employees[i]),
@@ -218,7 +233,10 @@ class _S extends State<StaffScreen> {
       title: 'إضافة موظف',
       body: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(
-          AppSpace.x4, AppSpace.x2, AppSpace.x4, AppSpace.x4,
+          AppSpace.x4,
+          AppSpace.x2,
+          AppSpace.x4,
+          AppSpace.x4,
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -288,7 +306,10 @@ class _S extends State<StaffScreen> {
       title: 'تعديل ${e.name}',
       body: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(
-          AppSpace.x4, AppSpace.x2, AppSpace.x4, AppSpace.x4,
+          AppSpace.x4,
+          AppSpace.x2,
+          AppSpace.x4,
+          AppSpace.x4,
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -406,7 +427,8 @@ class _FilterChip extends StatelessWidget {
                 label,
                 style: AppText.label.copyWith(
                   fontSize: 13,
-                  color: isSelected ? AppColors.primary : AppColors.textSecondary,
+                  color:
+                      isSelected ? AppColors.primary : AppColors.textSecondary,
                 ),
               ),
               const SizedBox(width: 4),
@@ -424,7 +446,9 @@ class _FilterChip extends StatelessWidget {
                     fontFamily: 'Tajawal',
                     fontSize: 11,
                     fontWeight: FontWeight.w700,
-                    color: isSelected ? AppColors.primary : AppColors.textSecondary,
+                    color: isSelected
+                        ? AppColors.primary
+                        : AppColors.textSecondary,
                   ),
                 ),
               ),
@@ -475,7 +499,9 @@ class _EmployeeCard extends StatelessWidget {
                   ),
                   child: Center(
                     child: Text(
-                      employee.name.isNotEmpty ? employee.name[0].toUpperCase() : '?',
+                      employee.name.isNotEmpty
+                          ? employee.name[0].toUpperCase()
+                          : '?',
                       style: AppText.titleMedium.copyWith(
                         fontSize: 20,
                         color: AppColors.primary,
@@ -518,11 +544,14 @@ class _EmployeeCard extends StatelessWidget {
                   width: 10,
                   height: 10,
                   decoration: BoxDecoration(
-                    color: _attendedToday ? AppColors.success : AppColors.danger,
+                    color:
+                        _attendedToday ? AppColors.success : AppColors.danger,
                     shape: BoxShape.circle,
                     boxShadow: [
                       BoxShadow(
-                        color: (_attendedToday ? AppColors.success : AppColors.danger)
+                        color: (_attendedToday
+                                ? AppColors.success
+                                : AppColors.danger)
                             .withValues(alpha: 0.4),
                         blurRadius: 4,
                         spreadRadius: 1,
@@ -541,7 +570,8 @@ class _EmployeeCard extends StatelessWidget {
                     const PopupMenuItem(value: 'edit', child: Text('تعديل')),
                     PopupMenuItem(
                       value: 'archive',
-                      child: Text(employee.archived ? 'إلغاء الأرشفة' : 'أرشفة'),
+                      child:
+                          Text(employee.archived ? 'إلغاء الأرشفة' : 'أرشفة'),
                     ),
                   ],
                 ),

@@ -1,6 +1,5 @@
 import 'package:uuid/uuid.dart';
 import '../models/commitment.dart';
-import '../models/rule.dart';
 import 'storage_service.dart';
 import 'reminder_service.dart';
 

@@ -59,15 +59,13 @@ class _S extends State<TodayScreen> {
         .where((r) => r.status != 'scheduled' && r.status != 'cancelled')
         .toList();
 
-    final activeEmployees = StorageService.employees()
-        .where((e) => !e.archived)
-        .toList();
+    final activeEmployees =
+        StorageService.employees().where((e) => !e.archived).toList();
     final attendedToday =
         activeEmployees.where((e) => e.attendance.contains(todayStr)).length;
     final absentToday = activeEmployees.length - attendedToday;
-    final activeSuppliers = StorageService.suppliers()
-        .where((s) => !s.archived)
-        .toList();
+    final activeSuppliers =
+        StorageService.suppliers().where((s) => !s.archived).toList();
     final suppliersDue =
         activeSuppliers.fold<double>(0, (sum, s) => sum + s.balanceDue);
     final customersOverdue = overdue
@@ -75,9 +73,29 @@ class _S extends State<TodayScreen> {
         .fold<double>(0, (sum, c) => sum + (c.amount ?? 0));
 
     // Date formatting
-    final dayNames = ['السبت', 'الجمعة', 'الخميس', 'الأربعاء', 'الثلاثاء', 'الإثنين', 'الأحد'];
-    final monthNames = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',
-        'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
+    final dayNames = [
+      'السبت',
+      'الجمعة',
+      'الخميس',
+      'الأربعاء',
+      'الثلاثاء',
+      'الإثنين',
+      'الأحد'
+    ];
+    final monthNames = [
+      'يناير',
+      'فبراير',
+      'مارس',
+      'أبريل',
+      'مايو',
+      'يونيو',
+      'يوليو',
+      'أغسطس',
+      'سبتمبر',
+      'أكتوبر',
+      'نوفمبر',
+      'ديسمبر'
+    ];
     final dayName = dayNames[now.weekday % 7];
     final monthName = monthNames[now.month - 1];
     final dateStr = '$dayName ${now.day} $monthName ${now.year}';
@@ -97,7 +115,10 @@ class _S extends State<TodayScreen> {
               bottom: false,
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(
-                  AppSpace.x4, AppSpace.x4, AppSpace.x4, AppSpace.x3,
+                  AppSpace.x4,
+                  AppSpace.x4,
+                  AppSpace.x4,
+                  AppSpace.x3,
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -123,7 +144,8 @@ class _S extends State<TodayScreen> {
                     ),
                     const SizedBox(height: AppSpace.x1),
                     // Status pills row
-                    if (activeEmployees.isNotEmpty || activeSuppliers.isNotEmpty)
+                    if (activeEmployees.isNotEmpty ||
+                        activeSuppliers.isNotEmpty)
                       Wrap(
                         spacing: AppSpace.x2,
                         runSpacing: AppSpace.x1,
@@ -139,12 +161,14 @@ class _S extends State<TodayScreen> {
                             ),
                           if (suppliersDue > 0)
                             AppBadge(
-                              label: '${suppliersDue.toStringAsFixed(0)} ج مستحق',
+                              label:
+                                  '${suppliersDue.toStringAsFixed(0)} ج مستحق',
                               kind: BadgeKind.accent,
                             ),
                           if (customersOverdue > 0)
                             AppBadge(
-                              label: '${customersOverdue.toStringAsFixed(0)} ج متأخرة',
+                              label:
+                                  '${customersOverdue.toStringAsFixed(0)} ج متأخرة',
                               kind: BadgeKind.danger,
                             ),
                           if (overdue.isNotEmpty)
@@ -166,7 +190,10 @@ class _S extends State<TodayScreen> {
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(
-                AppSpace.x4, AppSpace.x4, AppSpace.x4, 0,
+                AppSpace.x4,
+                AppSpace.x4,
+                AppSpace.x4,
+                0,
               ),
               child: _PriorityAlert(
                 count: overdue.length,
@@ -186,7 +213,8 @@ class _S extends State<TodayScreen> {
               children: [
                 Text(
                   'نظرة عامة',
-                  style: AppText.titleMedium.copyWith(fontSize: 15, fontWeight: FontWeight.w700),
+                  style: AppText.titleMedium
+                      .copyWith(fontSize: 15, fontWeight: FontWeight.w700),
                 ),
                 const SizedBox(height: AppSpace.x3),
                 Row(
@@ -205,7 +233,9 @@ class _S extends State<TodayScreen> {
                         label: 'الحضور',
                         value: '$attendedToday/${activeEmployees.length}',
                         icon: Icons.people_outline,
-                        color: absentToday > 0 ? AppColors.warning : AppColors.success,
+                        color: absentToday > 0
+                            ? AppColors.warning
+                            : AppColors.success,
                       ),
                     ),
                   ],
@@ -218,7 +248,9 @@ class _S extends State<TodayScreen> {
                         label: 'مستحق للموردين',
                         value: '${suppliersDue.toStringAsFixed(0)} ج',
                         icon: Icons.local_shipping_outlined,
-                        color: suppliersDue > 0 ? AppColors.accent : AppColors.success,
+                        color: suppliersDue > 0
+                            ? AppColors.accent
+                            : AppColors.success,
                       ),
                     ),
                     const SizedBox(width: AppSpace.x3),
@@ -242,7 +274,10 @@ class _S extends State<TodayScreen> {
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(
-                AppSpace.x4, 0, AppSpace.x4, AppSpace.x2,
+                AppSpace.x4,
+                0,
+                AppSpace.x4,
+                AppSpace.x2,
               ),
               child: Row(
                 children: [
@@ -294,7 +329,10 @@ class _S extends State<TodayScreen> {
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(
-                AppSpace.x4, AppSpace.x4, AppSpace.x4, AppSpace.x2,
+                AppSpace.x4,
+                AppSpace.x4,
+                AppSpace.x4,
+                AppSpace.x2,
               ),
               child: Row(
                 children: [
@@ -346,7 +384,10 @@ class _S extends State<TodayScreen> {
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(
-                AppSpace.x4, AppSpace.x4, AppSpace.x4, AppSpace.x2,
+                AppSpace.x4,
+                AppSpace.x4,
+                AppSpace.x4,
+                AppSpace.x2,
               ),
               child: Row(
                 children: [
@@ -378,7 +419,10 @@ class _S extends State<TodayScreen> {
           ),
           SliverPadding(
             padding: const EdgeInsets.fromLTRB(
-              AppSpace.x4, 0, AppSpace.x4, AppSpace.x4,
+              AppSpace.x4,
+              0,
+              AppSpace.x4,
+              AppSpace.x4,
             ),
             sliver: SliverList(
               delegate: SliverChildBuilderDelegate(
@@ -395,7 +439,10 @@ class _S extends State<TodayScreen> {
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(
-                  AppSpace.x4, 0, AppSpace.x4, AppSpace.x8,
+                  AppSpace.x4,
+                  0,
+                  AppSpace.x4,
+                  AppSpace.x8,
                 ),
                 child: Center(
                   child: Text(
@@ -612,19 +659,6 @@ class _CommitmentTile extends StatelessWidget {
     this.isUpcoming = false,
   });
 
-  String get _typeLabel {
-    switch (commitment.type) {
-      case 'debt_to_collect':
-        return 'تحصيل';
-      case 'debt_to_pay':
-        return 'دفعة';
-      case 'task':
-        return 'مهمة';
-      default:
-        return '';
-    }
-  }
-
   IconData get _icon {
     switch (commitment.type) {
       case 'debt_to_collect':
@@ -717,13 +751,15 @@ class _CommitmentTile extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 IconButton(
-                  icon: Icon(Icons.snooze, size: 20, color: AppColors.textSecondary),
+                  icon: Icon(Icons.snooze,
+                      size: 20, color: AppColors.textSecondary),
                   onPressed: () => _postpone(context),
                   tooltip: 'تأجيل',
                   visualDensity: VisualDensity.compact,
                 ),
                 IconButton(
-                  icon: Icon(Icons.check_circle_outline, size: 20, color: AppColors.success),
+                  icon: Icon(Icons.check_circle_outline,
+                      size: 20, color: AppColors.success),
                   onPressed: () => _markDone(context),
                   tooltip: 'تم',
                   visualDensity: VisualDensity.compact,
