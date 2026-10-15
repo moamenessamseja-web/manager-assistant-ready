@@ -134,6 +134,17 @@ phone) is **untested** — CI proves compile + packaging only.
 3. Optional live AI check: `GEMINI_API_KEY=... flutter test test/gemini_live_test.dart`.
 4. Push to `main` → GitHub Actions builds → release `build-<run_number>`.
 
+## CI gap closed (Session 3, same push)
+The workflow (`.github/workflows/build-apk.yml`) only ever ran `flutter build apk --release` —
+it never ran `flutter analyze` or `flutter test`. That means every prior "flutter analyze → 0
+issues / flutter test → 42/42 pass" claim in this file was **not actually verified by CI**, only
+(at best) by whatever local SDK a previous session had — which this sandbox does not have
+(`flutter`/`dart` both report "not found" here). Added two steps, `flutter analyze` and
+`flutter test --exclude-tags live`, before `flutter build apk --release`, both piped into the
+same `build_log.txt` the failure-log step already uploads. This is the first push where the
+analyzer and test suite are actually exercised by CI. Check the CI run this commit triggers for
+the real result — do not trust the test/analyzer counts above until that run is green.
+
 ## Honest status
 §3, §4, §5, §6, §7, §8, §9, §11, §12 are implemented and were **verified locally in Session 2**
 (0 analyzer issues, 42/42 tests). Session 3 (the Gemini-key restoration) is **not locally

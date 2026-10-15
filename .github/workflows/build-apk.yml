@@ -138,10 +138,20 @@ jobs:
 
       - run: flutter pub get
 
+      - name: Static analysis (flutter analyze)
+        run: |
+          set -o pipefail
+          flutter analyze 2>&1 | tee build_log.txt
+
+      - name: Run tests (offline suite — real Gemini integration tests are tagged "live" and skipped here)
+        run: |
+          set -o pipefail
+          flutter test --exclude-tags live 2>&1 | tee -a build_log.txt
+
       - name: Build APK
         run: |
           set -o pipefail
-          flutter build apk --release 2>&1 | tee build_log.txt
+          flutter build apk --release 2>&1 | tee -a build_log.txt
 
       - name: Create Release with APK
         if: success()
