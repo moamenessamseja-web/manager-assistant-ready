@@ -25,6 +25,14 @@ jobs:
           if [ ! -d "android" ]; then
             flutter create --platforms=android --org com.example --project-name manager_assistant .
           fi
+          # `flutter create .` only writes files that don't already exist, and this repo
+          # has never committed test/widget_test.dart — so every run since android/ stopped
+          # being committed has silently regenerated Flutter's default boilerplate test here,
+          # which references a non-existent `MyApp` class (our root widget is `ManagerApp` in
+          # lib/main.dart). It was invisible because CI never ran `flutter analyze`/`flutter
+          # test` until this build. Our own suite (test/*_test.dart) already covers the app;
+          # remove the generated placeholder so it can't fail analysis or tests.
+          rm -f test/widget_test.dart
 
       - name: Inject required Android permissions (mic + notifications)
         run: |
@@ -141,7 +149,11 @@ jobs:
       - name: Static analysis (flutter analyze)
         run: |
           set -o pipefail
-          flutter analyze 2>&1 | tee build_log.txt
+          # --no-fatal-infos: fail the build on real errors/warnings, not on the
+          # pre-existing style-only "info" lints (prefer_const_constructors etc.)
+          # that predate this CI check and are out of scope for this change —
+          # fixing those is a separate, broader cleanup, not a build-breaking bug.
+          flutter analyze --no-fatal-infos 2>&1 | tee build_log.txt
 
       - name: Run tests (offline suite — real Gemini integration tests are tagged "live" and skipped here)
         run: |
