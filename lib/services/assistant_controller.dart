@@ -6,6 +6,8 @@ import '../models/rule.dart';
 import 'gemini_service.dart';
 import 'storage_service.dart';
 import 'reminder_service.dart';
+import 'local_command_parser.dart';
+import 'conversation_context_service.dart';
 import '../design/format.dart';
 
 /// نتيجة البحث عن كيان (موظف/مورد) بالاسم — بتميّز صراحة بين:
@@ -19,11 +21,108 @@ class _Resolved<T> {
 }
 
 class AssistantController {
+  /// نقطة الدخول الموحّدة. التسلسل (بريف §3 و§4):
+  /// 1) استكمال عملية معلّقة من السياق.
+  /// 2) المحلل المحلي — بدون إنترنت وبدون أي مفتاح.
+  /// 3) Gemini اختياري للأوامر المعقدة فقط (لو الخدمة مهيأة).
+  /// 4) رسالة واضحة لو ما فهمناش.
+  ///
+  /// ممنوع أن يؤدي غياب الإنترنت أو مفتاح API إلى تعطيل أي عملية محلية.
   static Future<String> handle(String text) async {
+    final t = text.trim();
+    if (t.isEmpty) return 'اكتب أو قولّي عايز تعمل إيه.';
+
+    await ConversationContextService.init();
+
+    // (1) استكمال عملية معلّقة (رد على استيضاح سابق).
+    final resumed = await _tryResumePending(t);
+    if (resumed != null) return resumed;
+
+    // (2) المحلل المحلي أولاً.
+    final local = LocalCommandParser.parse(t);
+    if (local.isKnown) {
+      final fields = _applyPronounContext(t, local.toFields());
+      return _runLocal(fields, t, local.clarification);
+    }
+
+    // (3) Gemini اختياري — للأوامر المعقدة فقط، وفشله لا يعطّل أي شيء محلي.
     final key = StorageService.apiKey;
-    if (key.isEmpty) return '⚠️ ضع مفتاح Gemini من الإعدادات أولاً.';
+    if (key.isNotEmpty) {
+      try {
+        final viaGemini = await _handleWithGemini(t, key);
+        if (viaGemini != null) return viaGemini;
+      } catch (_) {
+        // الخدمة الاختيارية سقطت — نكمل بالرسالة الواضحة تحت.
+      }
+    }
+
+    // (4) لم نفهم.
+    return 'لم أفهم المطلوب بدقة. تقدر تقول مثلًا: "سجل حضور أحمد"، أو '
+        '"خصم 500 من أحمد"، أو "مين محضرش النهارده؟".';
+  }
+
+  /// ينفّذ نتيجة المحلل المحلي — ويحفظ العملية المعلّقة لو ناقصها بيانات.
+  static Future<String> _runLocal(
+    Map<String, dynamic> fields,
+    String text,
+    String? clarification,
+  ) async {
+    final intent = fields['intent'] as String;
+
+    // عدة أشخاص (بمعرّفات محفوظة أو بأسماء) — يُنفَّذ على كل سجل ثم تُجمَع النتائج.
+    final ids = <String>[
+      for (final e in (fields['person_ids'] as List? ?? [])) e.toString(),
+    ];
+    final people = <String>[
+      for (final e in (fields['people'] as List? ?? []))
+        if (e.toString().trim().isNotEmpty) e.toString().trim(),
+    ];
+    if (_multiPersonIntents.contains(intent) &&
+        (ids.length > 1 || people.length > 1)) {
+      final results = <String>[];
+      if (ids.length > 1) {
+        for (final id in ids) {
+          final one = Map<String, dynamic>.from(fields)..['person_id'] = id;
+          results.add(await _dispatch(intent, one, text));
+        }
+      } else {
+        for (final name in people) {
+          final one = Map<String, dynamic>.from(fields)
+            ..['person'] = name
+            ..['employee_name'] = name
+            ..['people'] = <String>[];
+          results.add(await _dispatch(intent, one, text));
+        }
+      }
+      await ConversationContextService.clearPending();
+      await ConversationContextService.clearLastPeople();
+      return '📋 نُفِّذ الأمر على ${results.length} أسماء:\n'
+          '${results.map((r) => '• $r').join('\n')}';
+    }
+
+    // اسم ملتبس؟ نحسمه قبل التنفيذ بدل تنفيذ العملية على سجل عشوائي.
+    final amb = await _ambiguityFor(intent, fields);
+    if (amb != null) return amb;
+
+    final missing = _missingFor(intent, fields);
+    if (missing.isNotEmpty) {
+      await ConversationContextService.setPending(PendingOperation(
+        intent: intent,
+        fields: Map<String, dynamic>.from(fields)..remove('intent'),
+        missing: missing,
+        createdAt: DateTime.now(),
+      ));
+      return clarification ?? _askFor(missing);
+    }
+    await ConversationContextService.clearPending();
+    return _dispatch(intent, fields, text);
+  }
+
+  /// مسار Gemini القديم — أصبح اختياريًا بالكامل. يرجع null لو ما فهمش.
+  static Future<String?> _handleWithGemini(String text, String key) async {
     final d = await GeminiService(key).parse(text);
     final intent = d['intent'] ?? 'other';
+    if (intent == 'other') return null;
 
     // موثوقية المبلغ: بعض النوايا محتاجة رقمًا. لو الموديل سابه فاضي،
     // نعيد التحليل **مرة واحدة** — بدون اختراع أي رقم من عندنا.
@@ -43,24 +142,163 @@ class AssistantController {
       if (only != null) d['amount'] = only;
     }
 
-    // §9 — أمر واحد بعدة أسماء: يُنفَّذ لكل اسم على حدة ثم تُجمَع النتائج،
-    // بدل ما يفشل أو ينفّذ على أول اسم بس.
-    final people = <String>[
-      for (final p in (d['people'] as List? ?? []))
-        if (p.toString().trim().isNotEmpty) p.toString().trim(),
-    ];
-    if (people.length > 1 && _multiPersonIntents.contains(intent)) {
-      final results = <String>[];
-      for (final name in people) {
-        final one = Map<String, dynamic>.from(d);
-        one['person'] = name;
-        one['employee_name'] = name;
-        one['people'] = <String>[];
-        results.add(await _dispatch(intent, one, text));
-      }
-      return '📋 نُفِّذ الأمر على ${people.length} أسماء:\n${results.map((r) => '• $r').join('\n')}';
+    return _runLocal(Map<String, dynamic>.from(d), text, null);
+  }
+
+  // ---------------- إكمال السياق (§4) ----------------
+
+  /// هل النص إشارة جماعية لآخر أشخاص أعادهم استعلام؟
+  static final RegExp _themRe = RegExp(
+    r'(سجلهم|سجللهم|سجلوا|لهم|كلهم|دول|هما|الغياب|الغايبين|المذكورين|هؤلاء)',
+  );
+
+  static Map<String, dynamic> _applyPronounContext(
+      String text, Map<String, dynamic> fields) {
+    final n = LocalCommandParser.normalize(text);
+    final hasPerson = (fields['person'] as String?)?.isNotEmpty == true;
+    if (hasPerson || !_themRe.hasMatch(n)) return fields;
+    final people = ConversationContextService.lastPeople();
+    if (people.isEmpty) return fields;
+    return Map<String, dynamic>.from(fields)
+      ..['person'] = people.first.name
+      ..['people'] = people.map((e) => e.name).toList()
+      ..['person_ids'] = people.map((e) => e.id).toList();
+  }
+
+  static bool _hasVal(Object? v) {
+    if (v == null) return false;
+    if (v is String) return v.trim().isNotEmpty;
+    if (v is num) return v > 0;
+    if (v is List) return v.isNotEmpty;
+    return true;
+  }
+
+  /// الحقول المطلوبة الناقصة لكل نية — بدون تخمين.
+  static List<String> _missingFor(String intent, Map<String, dynamic> f) {
+    final hasName = (f['person'] as String?)?.isNotEmpty == true ||
+        (f['person_ids'] as List?)?.isNotEmpty == true;
+    final hasAmount = ((f['amount'] as num?)?.toDouble() ?? 0) > 0;
+    switch (intent) {
+      case 'mark_attendance':
+      case 'add_supplier':
+      case 'supplier_delivery':
+      case 'mark_delivery_received':
+        return hasName || (f['person_ids'] as List?)?.isNotEmpty == true
+            ? const []
+            : ['person'];
+      case 'add_advance':
+      case 'add_deduction':
+      case 'add_bonus':
+      case 'add_supplier_payment':
+        return [
+          if (!hasName) 'person',
+          if (!hasAmount) 'amount',
+        ];
+      case 'record_purchase':
+        return [
+          if (!hasName) 'person',
+          if (!hasAmount) 'amount',
+        ];
+      case 'add_employee':
+        return [
+          if ((f['employee_name'] as String?)?.isEmpty != false)
+            'employee_name',
+          if (((f['salary'] as num?)?.toDouble() ?? 0) <= 0) 'salary',
+        ];
+      default:
+        return const [];
     }
-    return _dispatch(intent, d, text);
+  }
+
+  static String _askFor(List<String> missing) {
+    final parts = <String>[];
+    if (missing.contains('person')) parts.add('اسم الموظف/المورد');
+    if (missing.contains('employee_name')) parts.add('اسم الموظف');
+    if (missing.contains('amount')) parts.add('المبلغ');
+    if (missing.contains('salary')) parts.add('المرتب الشهري');
+    return '❓ محتاج ${parts.join(' و')}.';
+  }
+
+  /// استكمال عملية معلّقة من رد المستخدم (مبلغ/اسم ناقص، تأكيد، أو إلغاء).
+  /// يرجع null لو الرد مش متعلق بالعملية المعلّقة (أمر جديد مستقل).
+  static Future<String?> _tryResumePending(String text) async {
+    final p = ConversationContextService.pending();
+    if (p == null) return null;
+    final n = LocalCommandParser.normalize(text);
+
+    // إلغاء صريح.
+    if (RegExp(r'^(لا|الغي|الغاء|بلاش|سيبها|مش عايز)').hasMatch(n)) {
+      await ConversationContextService.clearPending();
+      return 'تمام، ألغيت العملية. 👍';
+    }
+    // اختيار من قائمة ملتبسة: «التاني» / «الثاني» / «الأول» / «رقم ٢».
+    if (p.options.isNotEmpty) {
+      final pick = _pickOption(n, p.options);
+      if (pick != null) {
+        final merged = Map<String, dynamic>.from(p.fields)
+          ..['person'] = pick.name
+          ..['person_id'] = pick.id;
+        final still = p.missing.where((k) => !_hasVal(merged[k])).toList();
+        if (still.isEmpty) {
+          await ConversationContextService.clearPending();
+          return _dispatch(p.intent, {'intent': p.intent, ...merged}, text);
+        }
+        await ConversationContextService.setPending(
+            p.copyWith(fields: merged, missing: still));
+        return _askFor(still);
+      }
+    }
+
+    final parsed = LocalCommandParser.parse(text);
+
+    // أمر جديد واضح ومختلف تمامًا → نلغي المعلّق ونسيب المسار العادي يكمّل.
+    if (parsed.isKnown && parsed.confident && parsed.intent != p.intent) {
+      await ConversationContextService.clearPending();
+      return null;
+    }
+
+    final merged = Map<String, dynamic>.from(p.fields);
+    for (final e in parsed.fields.entries) {
+      if (e.key == 'text_original' || e.key == 'intent') continue;
+      if (!_hasVal(merged[e.key]) || p.missing.contains(e.key))
+        merged[e.key] = e.value;
+    }
+
+    final still = p.missing.where((k) => !_hasVal(merged[k])).toList();
+    if (still.isEmpty) {
+      await ConversationContextService.clearPending();
+      return _dispatch(p.intent, {'intent': p.intent, ...merged}, text);
+    }
+    await ConversationContextService.setPending(
+        p.copyWith(fields: merged, missing: still));
+    return _askFor(still);
+  }
+
+  static ContextPerson? _pickOption(String n, List<ContextPerson> options) {
+    const ordinals = {
+      'الاول': 1,
+      'اول': 1,
+      'التاني': 2,
+      'الثاني': 2,
+      'تاني': 2,
+      'التالت': 3,
+      'الثالث': 3,
+      'تالت': 3,
+      'الرابع': 4,
+      'رابع': 4,
+    };
+    for (final e in ordinals.entries) {
+      if (RegExp('(^|\\s)${e.key}(\\s|\$)').hasMatch(n)) {
+        final i = e.value - 1;
+        if (i >= 0 && i < options.length) return options[i];
+      }
+    }
+    // اختيار بالاسم/الوظيفة
+    for (final o in options) {
+      final first = LocalCommandParser.normalize(o.name).split(' ').first;
+      if (first.isNotEmpty && n.contains(first)) return o;
+    }
+    return null;
   }
 
   /// النوايا اللي لازم يكون فيها رقم مالي.
@@ -91,7 +329,8 @@ class AssistantController {
         buf.write(ch);
       }
     }
-    final matches = RegExp(r'\d+(?:\.\d+)?').allMatches(buf.toString()).toList();
+    final matches =
+        RegExp(r'\d+(?:\.\d+)?').allMatches(buf.toString()).toList();
     if (matches.length != 1) return null;
     final v = double.tryParse(matches.first.group(0)!);
     return (v == null || v <= 0) ? null : v;
@@ -106,6 +345,78 @@ class AssistantController {
     return !hasAmount;
   }
 
+  /// النوايا اللي بتخص شخصًا واحدًا — لازم نحسم التباس الاسم قبل التنفيذ (§4).
+  static const Set<String> _personIntents = {
+    'mark_attendance',
+    'add_advance',
+    'add_deduction',
+    'add_bonus',
+    'record_purchase',
+    'add_supplier_payment',
+    'mark_delivery_received',
+    'supplier_delivery',
+  };
+
+  static const Set<String> _supplierIntents = {
+    'record_purchase',
+    'add_supplier_payment',
+    'mark_delivery_received',
+    'supplier_delivery',
+    'add_supplier',
+  };
+
+  /// لو الاسم ملتبس (أكتر من سجل)، نحفظ الخيارات بمعرّفاتها ونطلب التحديد
+  /// بدل تنفيذ العملية على سجل عشوائي.
+  static Future<String?> _ambiguityFor(
+      String intent, Map<String, dynamic> f) async {
+    if (!_personIntents.contains(intent)) return null;
+    if ((f['person_id'] as String?)?.isNotEmpty == true) return null;
+    final name = (f['person'] as String? ?? '').trim();
+    if (name.isEmpty) return null;
+    final isSupplier = _supplierIntents.contains(intent);
+    final role = (f['person_role'] as String? ?? '').trim();
+
+    String? ambMsg;
+    List<ContextPerson> options = const [];
+
+    if (isSupplier) {
+      final matches = StorageService.suppliersMatching(name);
+      if (matches.length > 1) {
+        options =
+            matches.map((s) => ContextPerson(id: s.id, name: s.name)).toList();
+        ambMsg = '🤔 عندي أكتر من مورد بالاسم ده: '
+            '${matches.map((s) => s.itemType.isEmpty ? s.name : '${s.name} (${s.itemType})').join(' / ')}. '
+            'قولّي مين بالظبط؟';
+      }
+    } else {
+      var matches = StorageService.employeesMatching(name);
+      if (role.isNotEmpty) {
+        final narrowed = matches
+            .where(
+                (e) => normalizeArabic(e.role).contains(normalizeArabic(role)))
+            .toList();
+        if (narrowed.isNotEmpty) matches = narrowed;
+      }
+      if (matches.length > 1) {
+        options =
+            matches.map((e) => ContextPerson(id: e.id, name: e.name)).toList();
+        ambMsg = '🤔 عندي أكتر من موظف بالاسم ده: '
+            '${matches.map((e) => '${e.name} (${e.role})').join(' / ')}. '
+            'قولّي مين بالظبط؟';
+      }
+    }
+
+    if (ambMsg == null) return null;
+    await ConversationContextService.setPending(PendingOperation(
+      intent: intent,
+      fields: Map<String, dynamic>.from(f)..remove('intent'),
+      missing: const ['person'],
+      options: options,
+      createdAt: DateTime.now(),
+    ));
+    return ambMsg;
+  }
+
   /// الأنواع اللي معناها قد يخص أكتر من شخص واحد (§9).
   static const Set<String> _multiPersonIntents = {
     'mark_attendance',
@@ -116,7 +427,8 @@ class AssistantController {
     'create_commitment',
   };
 
-  static Future<String> _dispatch(String intent, Map<String, dynamic> d, String text) async {
+  static Future<String> _dispatch(
+      String intent, Map<String, dynamic> d, String text) async {
     switch (intent) {
       case 'add_employee':
         return _addEmployee(d);
@@ -147,24 +459,38 @@ class AssistantController {
 
   // ---------------- Entity resolution (لا تخمين عند التباس) ----------------
 
-  static _Resolved<Employee> _resolveEmployee(String name) {
-    if (name.trim().isEmpty) return const _Resolved(null, '❓ محتاج اسم الموظف.');
+  /// يحل الموظف بالمعرّف الثابت أولاً (من السياق §4) ثم بالاسم.
+  /// المعرّف يتقدّم دائمًا عشان ما ننفّذش عملية على شخص غلط عند تشابه الأسماء.
+  static _Resolved<Employee> _resolveEmployee(String name, [String? id]) {
+    if (id != null && id.isNotEmpty) {
+      final byId = StorageService.employees().where((e) => e.id == id).toList();
+      if (byId.length == 1) return _Resolved(byId.first, null);
+    }
+    if (name.trim().isEmpty)
+      return const _Resolved(null, '❓ محتاج اسم الموظف.');
     final matches = StorageService.employeesMatching(name);
     if (matches.isEmpty) return _Resolved(null, '❓ لم أجد موظف باسم $name.');
     if (matches.length > 1) {
       final opts = matches.map((e) => '${e.name} (${e.role})').join(' / ');
-      return _Resolved(null, '🤔 عندي أكتر من موظف بنفس الاسم: $opts. وضّح مين بالظبط؟');
+      return _Resolved(
+          null, '🤔 عندي أكتر من موظف بنفس الاسم: $opts. وضّح مين بالظبط؟');
     }
     return _Resolved(matches.first, null);
   }
 
-  static _Resolved<Supplier> _resolveSupplier(String name) {
-    if (name.trim().isEmpty) return const _Resolved(null, '❓ محتاج اسم المورد.');
+  static _Resolved<Supplier> _resolveSupplier(String name, [String? id]) {
+    if (id != null && id.isNotEmpty) {
+      final byId = StorageService.suppliers().where((s) => s.id == id).toList();
+      if (byId.length == 1) return _Resolved(byId.first, null);
+    }
+    if (name.trim().isEmpty)
+      return const _Resolved(null, '❓ محتاج اسم المورد.');
     final matches = StorageService.suppliersMatching(name);
     if (matches.isEmpty) return _Resolved(null, '❓ لم أجد مورد باسم $name.');
     if (matches.length > 1) {
       final opts = matches.map((s) => '${s.name} (${s.itemType})').join(' / ');
-      return _Resolved(null, '🤔 عندي أكتر من مورد بنفس الاسم: $opts. وضّح مين بالظبط؟');
+      return _Resolved(
+          null, '🤔 عندي أكتر من مورد بنفس الاسم: $opts. وضّح مين بالظبط؟');
     }
     return _Resolved(matches.first, null);
   }
@@ -172,12 +498,31 @@ class AssistantController {
   // ---------------- Employees ----------------
 
   static Future<String> _addEmployee(Map<String, dynamic> d) async {
+    final name = (d['employee_name'] ?? d['person'] ?? '').toString().trim();
+    if (name.isEmpty) return '❓ محتاج اسم الموظف.';
+
+    // لا نختلق راتبًا — لو مش مذكور نسأل المستخدم (§5).
+    final salary = (d['salary'] as num?)?.toDouble() ?? 0;
+    if (salary <= 0) return '❓ محتاج المرتب الشهري لـ $name عشان أسجّله صح.';
+
+    // منع تكرار السجل بنفس الاسم (تطابق تام بعد التطبيع، مش تشابه جزئي).
+    final norm = normalizeArabic(name);
+    final exact = StorageService.employees()
+        .where((e) => normalizeArabic(e.name) == norm)
+        .toList();
+    if (exact.isNotEmpty) {
+      return 'ℹ️ فيه موظف مسجل بالفعل باسم ${exact.first.name} (${exact.first.role}). '
+          'عدّل بياناته من ملفه بدل إنشاء سجل مكرر.';
+    }
+
     final e = Employee(
       id: const Uuid().v4(),
-      name: d['employee_name'] ?? d['person'] ?? 'موظف',
-      role: d['employee_role'] ?? 'عامل',
+      name: name,
+      role: (d['employee_role'] as String?)?.trim().isNotEmpty == true
+          ? d['employee_role']
+          : 'عامل',
       startDate: DateTime.tryParse(d['start_date'] ?? '') ?? DateTime.now(),
-      salaryMonthly: (d['salary'] as num?)?.toDouble() ?? 0,
+      salaryMonthly: salary,
     );
     await StorageService.saveEmployee(e);
     return '✅ سجلت الموظف ${e.name}، المرتب ${e.salaryMonthly.toStringAsFixed(0)} جنيه.';
@@ -185,17 +530,21 @@ class AssistantController {
 
   static Future<String> _addAdvance(Map<String, dynamic> d, String text) async {
     final name = d['person'] ?? d['employee_name'] ?? '';
-    final resolved = _resolveEmployee(name);
+    final resolved = _resolveEmployee(name, d['person_id'] as String?);
     if (!resolved.ok) return resolved.message!;
     final e = resolved.value!;
     e.advances.add(Advance(
-        id: const Uuid().v4(), amount: (d['amount'] as num?)?.toDouble() ?? 0, date: DateTime.now(), note: text));
+        id: const Uuid().v4(),
+        amount: (d['amount'] as num?)?.toDouble() ?? 0,
+        date: DateTime.now(),
+        note: text));
     await StorageService.saveEmployee(e);
     return '✅ سجلت السلفة لـ ${e.name}. باقي له ${e.remainingSalary.toStringAsFixed(0)} جنيه.';
   }
 
   static Future<String> _markAttendance(Map<String, dynamic> d) async {
-    final resolved = _resolveEmployee(d['person'] ?? '');
+    final resolved =
+        _resolveEmployee(d['person'] ?? '', d['person_id'] as String?);
     if (!resolved.ok) return resolved.message!;
     final e = resolved.value!;
     final day = DateTime.now().toIso8601String().substring(0, 10);
@@ -266,12 +615,15 @@ class AssistantController {
   static Future<String> _recordPurchaseIntent(Map<String, dynamic> d) async {
     final name = d['person'] ?? '';
     if (name.trim().isEmpty) return '❓ محتاج اسم المورد.';
-    final resolved = _resolveSupplier(name);
+    final resolved = _resolveSupplier(name, d['person_id'] as String?);
     Supplier s;
     if (!resolved.ok) {
       final matches = StorageService.suppliersMatching(name);
       if (matches.length > 1) return resolved.message!;
-      s = Supplier(id: const Uuid().v4(), name: name, itemType: d['supplier_item'] ?? '');
+      s = Supplier(
+          id: const Uuid().v4(),
+          name: name,
+          itemType: d['supplier_item'] ?? '');
     } else {
       s = resolved.value!;
     }
@@ -288,14 +640,17 @@ class AssistantController {
 
   static Future<String> _supplierDelivery(Map<String, dynamic> d) async {
     final name = d['person'] ?? '';
-    var resolved = _resolveSupplier(name);
+    var resolved = _resolveSupplier(name, d['person_id'] as String?);
     Supplier s;
     if (!resolved.ok) {
       // لو مفيش مورد بهذا الاسم خالص (مش التباس)، ننشئه تلقائيًا بدل الرفض —
       // لكن لو فيه التباس (أكتر من واحد) نوقف ونطلب توضيح.
       final matches = StorageService.suppliersMatching(name);
       if (matches.length > 1) return resolved.message!;
-      s = Supplier(id: const Uuid().v4(), name: name.isEmpty ? 'مورد' : name, itemType: d['supplier_item'] ?? '');
+      s = Supplier(
+          id: const Uuid().v4(),
+          name: name.isEmpty ? 'مورد' : name,
+          itemType: d['supplier_item'] ?? '');
     } else {
       s = resolved.value!;
     }
@@ -304,12 +659,14 @@ class AssistantController {
       item: d['delivery_item'] ?? s.itemType,
       quantity: (d['delivery_quantity'] as num?)?.toDouble(),
       unit: d['delivery_unit'] ?? '',
-      expectedDate: DateTime.tryParse(d['due_date'] ?? '') ?? DateTime.now().add(const Duration(days: 1)),
+      expectedDate: DateTime.tryParse(d['due_date'] ?? '') ??
+          DateTime.now().add(const Duration(days: 1)),
     );
     s.deliveries.add(del);
     await StorageService.saveSupplier(s);
-    final rem = DateTime.tryParse((d['remind_at'] ?? '').replaceFirst(' ', 'T')) ??
-        del.expectedDate.subtract(const Duration(hours: 2));
+    final rem =
+        DateTime.tryParse((d['remind_at'] ?? '').replaceFirst(' ', 'T')) ??
+            del.expectedDate.subtract(const Duration(hours: 2));
     final c = Commitment(
       id: const Uuid().v4(),
       textOriginal: d['text_original'] ?? '',
@@ -321,7 +678,9 @@ class AssistantController {
     await StorageService.saveCommitment(c);
     final outcome = await ReminderService.createAndSchedule(
       title: 'توريد متوقع: ${s.name}',
-      body: c.textOriginal.isEmpty ? 'توريد ${del.item} من ${s.name}' : c.textOriginal,
+      body: c.textOriginal.isEmpty
+          ? 'توريد ${del.item} من ${s.name}'
+          : c.textOriginal,
       dueAt: rem,
       relatedEntityId: c.id,
       relatedEntityType: 'commitment',
@@ -330,7 +689,8 @@ class AssistantController {
   }
 
   static Future<String> _markDeliveryReceived(Map<String, dynamic> d) async {
-    final resolved = _resolveSupplier(d['person'] ?? '');
+    final resolved =
+        _resolveSupplier(d['person'] ?? '', d['person_id'] as String?);
     if (!resolved.ok) return resolved.message!;
     final s = resolved.value!;
     final pending = s.pendingDeliveries;
@@ -352,7 +712,8 @@ class AssistantController {
   }
 
   static Future<String> _addSupplierPayment(Map<String, dynamic> d) async {
-    final resolved = _resolveSupplier(d['person'] ?? '');
+    final resolved =
+        _resolveSupplier(d['person'] ?? '', d['person_id'] as String?);
     if (!resolved.ok) return resolved.message!;
     final s = resolved.value!;
     final amt = (d['amount'] as num?)?.toDouble() ?? 0;
@@ -377,9 +738,11 @@ class AssistantController {
     DateTime next;
     if (freq == 'weekly') {
       final addDays = (anchor - now.weekday) % 7;
-      next = DateTime(now.year, now.month, now.day, 9).add(Duration(days: addDays == 0 ? 7 : addDays));
+      next = DateTime(now.year, now.month, now.day, 9)
+          .add(Duration(days: addDays == 0 ? 7 : addDays));
     } else if (freq == 'daily') {
-      next = DateTime(now.year, now.month, now.day, 9).add(const Duration(days: 1));
+      next = DateTime(now.year, now.month, now.day, 9)
+          .add(const Duration(days: 1));
     } else {
       var y = now.year, m = now.month;
       if (now.day >= anchor) {
@@ -406,9 +769,13 @@ class AssistantController {
 
   // ---------------- Commitments ----------------
 
-  static Future<String> _createCommitment(Map<String, dynamic> d, String text) async {
-    final due = DateTime.tryParse(d['due_date'] ?? '') ?? DateTime.now().add(const Duration(days: 1));
-    final rem = DateTime.tryParse((d['remind_at'] ?? '').replaceFirst(' ', 'T')) ?? due.subtract(const Duration(hours: 1));
+  static Future<String> _createCommitment(
+      Map<String, dynamic> d, String text) async {
+    final due = DateTime.tryParse(d['due_date'] ?? '') ??
+        DateTime.now().add(const Duration(days: 1));
+    final rem =
+        DateTime.tryParse((d['remind_at'] ?? '').replaceFirst(' ', 'T')) ??
+            due.subtract(const Duration(hours: 1));
     final c = Commitment(
       id: const Uuid().v4(),
       textOriginal: d['text_original'] ?? text,
@@ -441,22 +808,36 @@ class AssistantController {
       case 'debtors':
       case 'who_owes':
         final debts = StorageService.commitments()
-            .where((c) => c.status == 'pending' && c.type == 'debt_to_collect' && (c.amount ?? 0) > 0)
+            .where((c) =>
+                c.status == 'pending' &&
+                c.type == 'debt_to_collect' &&
+                (c.amount ?? 0) > 0)
             .toList();
         if (debts.isEmpty) return 'مفيش حد عليه فلوس مسجل دلوقتي. 🎉';
-        final lines = debts.map((c) => '• ${c.person}: ${c.amount!.toStringAsFixed(0)} ج (${arabicDate(c.dueDate)})');
+        final lines = debts.map((c) =>
+            '• ${c.person}: ${c.amount!.toStringAsFixed(0)} ج (${arabicDate(c.dueDate)})');
         return 'اللي عليهم فلوس:\n${lines.join('\n')}';
 
       case 'absent_today':
-        final emps = StorageService.employees().where((e) => !e.archived).toList();
+        final emps =
+            StorageService.employees().where((e) => !e.archived).toList();
         final todayStr = today.toIso8601String().substring(0, 10);
-        final absent = emps.where((e) => !e.attendance.contains(todayStr)).toList();
-        if (absent.isEmpty) return 'كل العاملين سجلوا حضورهم النهاردة. ✅';
+        final absent =
+            emps.where((e) => !e.attendance.contains(todayStr)).toList();
+        if (absent.isEmpty) {
+          await ConversationContextService.clearLastPeople();
+          return 'كل العاملين سجلوا حضورهم النهاردة. ✅';
+        }
+        // §4: نحفظ الأشخاص بمعرّفات سجلاتهم الثابتة عشان «سجلهم حضور» يتنفّذ
+        // على السجلات الصحيحة نفسها، مش بالاعتماد على الاسم الظاهر.
+        await ConversationContextService.setLastPeople(
+          absent.map((e) => ContextPerson(id: e.id, name: e.name)).toList(),
+        );
         return 'لسه ما سجلوش حضور النهاردة:\n${absent.map((e) => '• ${e.name}').join('\n')}';
 
       case 'supplier_balance':
         final name = d['person'] ?? '';
-        final resolved = _resolveSupplier(name);
+        final resolved = _resolveSupplier(name, d['person_id'] as String?);
         if (!resolved.ok) return resolved.message!;
         final s = resolved.value!;
         return 'حساب ${s.name}:\n'
@@ -470,7 +851,8 @@ class AssistantController {
         for (final e in StorageService.employees()) {
           final recent = e.advances.where((a) => a.date.isAfter(weekAgo));
           for (final a in recent) {
-            rows.add('• ${e.name}: ${a.amount.toStringAsFixed(0)} ج (${arabicDateTime(a.date)})');
+            rows.add(
+                '• ${e.name}: ${a.amount.toStringAsFixed(0)} ج (${arabicDateTime(a.date)})');
           }
         }
         if (rows.isEmpty) return 'مفيش سلف اتسجلت في آخر أسبوع.';

@@ -10,7 +10,8 @@ class L {
 
   static String get lang => _lang;
   static bool get isArabic => _lang != 'en';
-  static TextDirection get direction => isArabic ? TextDirection.rtl : TextDirection.ltr;
+  static TextDirection get direction =>
+      isArabic ? TextDirection.rtl : TextDirection.ltr;
   static Locale get locale => Locale(_lang);
 
   static void setLang(String code) => _lang = (code == 'en') ? 'en' : 'ar';
@@ -35,15 +36,21 @@ class L {
     'language': 'اللغة',
     'lang_arabic': 'العربية',
     'lang_english': 'English',
-    'language_note': 'تغيير اللغة يغيّر اتجاه الواجهة (RTL/LTR). بياناتك كما هي.',
+    'language_note':
+        'تغيير اللغة يغيّر اتجاه الواجهة (RTL/LTR). بياناتك كما هي.',
     'gemini_key': 'مفتاح Gemini',
     'gemini_hint': 'الصق المفتاح هنا',
     'save_key': 'حفظ المفتاح',
     'saved': 'تم الحفظ ✅',
-    'key_note': 'المفتاح محفوظ محليًا على جهازك فقط — لا يُرفع للمستودع ولا يُضمَّن في الكود.',
+    'key_note':
+        'المفتاح محفوظ محليًا على جهازك فقط — لا يُرفع للمستودع ولا يُضمَّن في الكود.',
     'notif_diag': 'تشخيص الإشعارات',
     'notif_diag_sub': 'اعرف ليه تنبيه ما وصلش',
     'general': 'عام',
+    'offline_title': 'وضع العمل',
+    'offline_note': 'التطبيق يفهم أوامرك ويسجّل عملياتك محليًا على جهازك — '
+        'من غير إنترنت ومن غير أي مفتاح API. الحضور والسلف والخصومات والتوريدات '
+        'واستعلامات الحسابات كلها تعمل offline.',
   };
 
   static const Map<String, String> _en = {
@@ -66,17 +73,22 @@ class L {
     'language': 'Language',
     'lang_arabic': 'العربية',
     'lang_english': 'English',
-    'language_note': 'Changing the language also flips the UI direction (RTL/LTR). Your data stays as-is.',
+    'language_note':
+        'Changing the language also flips the UI direction (RTL/LTR). Your data stays as-is.',
     'gemini_key': 'Gemini API key',
     'gemini_hint': 'Paste the key here',
     'save_key': 'Save key',
     'saved': 'Saved ✅',
-    'key_note': 'The key is stored locally on your device only — never committed and never baked into source.',
+    'key_note':
+        'The key is stored locally on your device only — never committed and never baked into source.',
     'notif_diag': 'Notification diagnostics',
     'notif_diag_sub': 'Find out why an alert did not arrive',
     'general': 'General',
+    'offline_title': 'How it works',
+    'offline_note': 'The app understands your commands and records your business '
+        'locally on your device — no internet and no API key required. Attendance, '
+        'advances, deductions, deliveries and account queries all work offline.',
   };
 
-  static String t(String key) =>
-      (isArabic ? _ar : _en)[key] ?? _ar[key] ?? key;
+  static String t(String key) => (isArabic ? _ar : _en)[key] ?? _ar[key] ?? key;
 }

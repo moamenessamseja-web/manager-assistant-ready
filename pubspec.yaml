@@ -1,7 +1,7 @@
 name: manager_assistant
 description: مساعد الإدارة - AI Chief of Staff للمشروعات الصغيرة
 publish_to: 'none'
-version: 1.1.0+2
+version: 1.2.0+3
 environment:
   sdk: '>=3.4.0 <4.0.0'
 dependencies:

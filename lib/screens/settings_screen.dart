@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../services/storage_service.dart';
 import '../services/app_state.dart';
 import '../services/settings_service.dart';
 import '../design/tokens.dart';
@@ -17,20 +16,6 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _S extends State<SettingsScreen> {
-  late TextEditingController c;
-
-  @override
-  void initState() {
-    super.initState();
-    c = TextEditingController(text: StorageService.apiKey);
-  }
-
-  @override
-  void dispose() {
-    c.dispose();
-    super.dispose();
-  }
-
   Future<void> _setTheme(ThemeMode m) async {
     await SettingsService.setThemeMode(m);
     AppState.instance.notify(); // يُعيد بناء MaterialApp بالثيم الجديد
@@ -103,34 +88,13 @@ class _S extends State<SettingsScreen> {
           const SizedBox(height: AppSpace.x4),
           const Divider(height: 1),
 
-          // ── المفتاح ──
-          AppSectionHeader(title: L.t('gemini_key')),
+          // ── وضع العمل ──
+          // §9: لا يوجد أي حقل مفتاح API في واجهة العميل. التطبيق يفهم الأوامر
+          // المدعومة محليًا على الجهاز، ويعمل بالكامل بدون إنترنت وبدون أي مفتاح.
+          AppSectionHeader(title: L.t('offline_title')),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: AppSpace.x4),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                TextField(
-                  controller: c,
-                  obscureText: true,
-                  decoration: InputDecoration(hintText: L.t('gemini_hint')),
-                ),
-                const SizedBox(height: AppSpace.x3),
-                FilledButton(
-                  onPressed: () async {
-                    await StorageService.setApiKey(c.text.trim());
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(L.t('saved'))),
-                      );
-                    }
-                  },
-                  child: Text(L.t('save_key')),
-                ),
-                const SizedBox(height: AppSpace.x2),
-                Text(L.t('key_note'), style: AppText.bodyMuted),
-              ],
-            ),
+            child: Text(L.t('offline_note'), style: AppText.bodyMuted),
           ),
 
           const SizedBox(height: AppSpace.x4),
@@ -145,7 +109,8 @@ class _S extends State<SettingsScreen> {
             trailing: const Icon(Icons.chevron_left),
             onTap: () => Navigator.push(
               context,
-              MaterialPageRoute(builder: (_) => const NotificationDebugScreen()),
+              MaterialPageRoute(
+                  builder: (_) => const NotificationDebugScreen()),
             ),
           ),
           const SizedBox(height: AppSpace.x8),
