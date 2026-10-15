@@ -107,8 +107,8 @@ in both modes.
   pumps `SettingsScreen` and asserts the key `TextField` exists and `save_key` actually persists
   the entered value via `StorageService`. This is the repo's **first widget test** — see the
   honest caveat below.
-- **Total offline (Session 2 count): 42/42 pass. Session 3 adds 4 more (not yet CI-confirmed —
-  see "Honest status").**
+- **CI-confirmed on build #68 (first real run of this suite): 45/46 pass** — the 1 failure was
+  the new widget test's own bug (fixed, see "CI gap closed" above; not yet re-confirmed green).
 
 ## §12 — Docs
 `README_AR.md` rewritten (offline-first behaviour, how to run/test, what works offline, limits).
@@ -165,9 +165,14 @@ the real result — do not trust the test/analyzer counts above until that run i
    silently block it. This is a deliberate, documented scoping choice, not a loophole — the next
    session doing a cleanup pass can tighten it back once those 55 are actually fixed.
 
-Both are fixed in the same push. **Still pending confirmation: does `flutter test
---exclude-tags live` (including the 4 new tests this session added) actually pass once analyze
-no longer blocks it?** Check the next CI run before trusting that count.
+Both were fixed in the same push (build #68). **Result: `flutter analyze` passed (55 pre-existing
+infos, correctly non-fatal); `flutter test --exclude-tags live` ran 46 tests — 45 passed, 1
+failed.** The one failure was this session's own new widget test: the default `flutter test`
+surface is 800×600, `SettingsScreen` is a `ListView`, and the save button sat below that fold —
+`tester.tap()` couldn't hit-test an offset outside the render view bounds. The field itself
+rendered fine (`find.byType(TextField)` found it); only the tap on a not-yet-scrolled-to button
+failed. Fixed with `tester.ensureVisible(saveButton)` before the tap, pushed as the next commit —
+check that run's conclusion before trusting "46/46" below.
 
 ## Honest status
 §3, §4, §5, §6, §7, §8, §9, §11, §12 are implemented and were **verified locally in Session 2**

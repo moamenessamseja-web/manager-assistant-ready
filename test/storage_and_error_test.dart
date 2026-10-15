@@ -171,7 +171,12 @@ void main() {
           reason: 'لازم يكون فيه حقل نصي واحد لمفتاح Gemini في الإعدادات');
 
       await tester.enterText(field, 'AIzaSyWidgetTestKey000000000');
-      await tester.tap(find.widgetWithText(ElevatedButton, L.t('save_key')));
+      final saveButton = find.widgetWithText(ElevatedButton, L.t('save_key'));
+      // الشاشة ListView طويلة وزرار الحفظ ممكن يكون تحت حدود الفيوبورت
+      // الافتراضي للاختبار — نمرّر له الشاشة فعليًا قبل الضغط عليه.
+      await tester.ensureVisible(saveButton);
+      await tester.pumpAndSettle();
+      await tester.tap(saveButton);
       await tester.pumpAndSettle();
 
       expect(StorageService.apiKey, 'AIzaSyWidgetTestKey000000000');
