@@ -1,11 +1,18 @@
 # Implementation State
 
-- **Brief:** `my best agint.md` (the only brief). `To Accio.md` is superseded.
+- **Brief:** `my best agint.md` (the original agent brief) + `sonnet_come_back.md`
+  (the active task that restored §9's API-key field — see Session 3 below).
+  `To Accio.md` is superseded.
 - **Baseline:** `main @ 2429a12` (= build #63, green) — resumed from here.
 - **Session 1 commit:** `196a2d7` → **build #64 green** (§3 + §4 + §9 + §5 safety + tests + docs).
-- **Session 2 (this one):** §6 + §7 + §8 + analyzer cleanup, all in **one commit**.
-- **Verification:** `flutter analyze` → **0 issues (fully clean)**; `flutter test --exclude-tags live`
+- **Session 2:** `06f89e6` → **build #65 green** (§6 + §7 + §8 + analyzer cleanup, one commit).
+- **Session 3 (this one):** restored the Gemini API-key Settings field that Session 1
+  removed — see "Session 3" section below for why and what changed.
+- **Verification (Session 2):** `flutter analyze` → **0 issues**; `flutter test --exclude-tags live`
   → **42/42 pass**, with Flutter **3.47.7** (the CI version).
+- **Verification (Session 3):** not re-run locally — **no Flutter/Dart SDK in this sandbox**
+  (see "Session 3" section). Brace/paren balance checked by script; correctness relies on
+  the CI run for the pushed commit. Update this line once that run's result is known.
 
 ## §3 — Local command engine (done in `196a2d7`)
 `lib/models/command_result.dart` + `lib/services/local_command_parser.dart`: Arabic normalization
@@ -64,9 +71,28 @@ and ask instead of auto-creating or acting on the wrong record.
 - `main.dart` startup is resilient: a notification-service failure is logged and never blocks the
   app or any local operation.
 
-## §9 — Gemini hidden from the product (done in `196a2d7`)
-No API-key field in the UI; no key in source; Gemini is optional and disabled by default; its
-absence or failure never disables a local operation.
+## §9 — Gemini optional, key field restored in Settings (Session 1 removed it; Session 3 restored it)
+Session 1 (`196a2d7`) removed the API-key field from the Settings UI entirely, reading `my best
+agint.md` §9 ("hidden from the product") as "no field at all". That directly contradicts the
+*active* task brief (`sonnet_come_back.md` §8): "Do not remove the existing Gemini API-key field
+from Settings... I specifically need to test the application in two modes." The owner's
+2026-10-16 instruction confirmed this explicitly: keep Gemini alongside offline, chat must work
+in both modes.
+
+**Session 3 fix** (smallest safe change — UI + strings only, zero business-logic changes):
+- `lib/screens/settings_screen.dart`: added a "Gemini key (optional)" section — `TextField`
+  (obscured, with a show/hide toggle), a save button (`StorageService.setApiKey`) and a clear
+  button, plus a configured/not-configured status line. `StorageService.apiKey` /
+  `StorageService.setApiKey` already existed and were already wired into
+  `AssistantController._handleWithGemini` (`196a2d7`) — only the UI was missing. No change to
+  `gemini_service.dart`, `assistant_controller.dart`, or the local-engine-first dispatch order.
+- `lib/design/strings.dart`: added `gemini_section_note`, `clear_key`, `key_cleared`,
+  `key_configured`, `key_not_configured` (ar + en). `gemini_key`/`gemini_hint`/`save_key`/
+  `saved`/`key_note` already existed from before Session 1 removed the field — reused as-is.
+- `README_AR.md`: corrected the two lines that claimed no key field exists.
+- The local command engine is still the **default and primary** path for every supported
+  operation; the key only ever affects the optional Gemini fallback for phrasing the local
+  parser doesn't recognize. An empty/missing key is still the out-of-the-box state.
 
 ## §11 — Tests
 - `test/local_command_parser_test.dart` (18) — parser, fully offline.
@@ -76,7 +102,13 @@ absence or failure never disables a local operation.
 - Pre-existing: `test/employee_test.dart` (6), `test/supplier_test.dart` (8), `test/model_test.dart` (1).
 - `test/gemini_live_test.dart` (3, tag `live`) — real end-to-end; **auto-skipped** without
   `GEMINI_API_KEY`; the key is never stored in the repo.
-- **Total offline: 42/42 pass.**
+- `test/storage_and_error_test.dart` (Session 3, **+4**): `StorageService.apiKey` empty by
+  default, save/read round-trip, clear-returns-empty, and a `testWidgets` regression guard that
+  pumps `SettingsScreen` and asserts the key `TextField` exists and `save_key` actually persists
+  the entered value via `StorageService`. This is the repo's **first widget test** — see the
+  honest caveat below.
+- **Total offline (Session 2 count): 42/42 pass. Session 3 adds 4 more (not yet CI-confirmed —
+  see "Honest status").**
 
 ## §12 — Docs
 `README_AR.md` rewritten (offline-first behaviour, how to run/test, what works offline, limits).
@@ -103,6 +135,14 @@ phone) is **untested** — CI proves compile + packaging only.
 4. Push to `main` → GitHub Actions builds → release `build-<run_number>`.
 
 ## Honest status
-§3, §4, §5, §6, §7, §8, §9, §11, §12 are implemented and **verified locally**
-(0 analyzer issues, 42/42 tests). CI build + APK for the session-2 commit are reported at push time;
-device-level checks remain outstanding.
+§3, §4, §5, §6, §7, §8, §9, §11, §12 are implemented and were **verified locally in Session 2**
+(0 analyzer issues, 42/42 tests). Session 3 (the Gemini-key restoration) is **not locally
+verified** — there is no Flutter/Dart SDK in this sandbox, so `flutter analyze` / `flutter test`
+could not be run before pushing. What Session 3 *did* verify before pushing: brace/paren/bracket
+balance across every changed file (script-checked, matched), `git diff --stat` scoped to exactly
+the 4 intended files, and a manual read of the diff against the existing design-system and
+string-table conventions used elsewhere in the same files. The actual compile/test/widget-test
+result is whatever the pushed commit's CI run reports — read that run's conclusion (and, if red,
+its `build_log_tail.txt` release asset) before treating this change as verified; don't infer
+success from the diff alone. Device-level checks (does the saved key actually reach a live
+Gemini call on a real phone) remain outstanding, as before.

@@ -1,10 +1,14 @@
 import 'dart:convert';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:manager_assistant/models/employee.dart';
 import 'package:manager_assistant/services/storage_service.dart';
 import 'package:manager_assistant/services/app_error_service.dart';
 import 'package:manager_assistant/services/chat_history_service.dart';
+import 'package:manager_assistant/services/settings_service.dart';
+import 'package:manager_assistant/screens/settings_screen.dart';
+import 'package:manager_assistant/design/strings.dart';
 
 /// اختبارات سلامة التخزين (§6) وطبقة الأخطاء (§8) وسجل المحادثة (§7).
 /// كلها تعمل offline بدون أي مفتاح.
@@ -16,6 +20,7 @@ void main() {
     await StorageService.init();
     await AppErrorService.init();
     await ChatHistoryService.init();
+    await SettingsService.init();
   });
 
   group('التخزين — سلامة البيانات (§6)', () {
@@ -133,6 +138,43 @@ void main() {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('chat_history_v1', '{ ليس JSON');
       expect(ChatHistoryService.all(), isEmpty);
+    });
+  });
+
+  group('مفتاح Gemini الاختياري (§8/§9 — مسار مساعد فقط)', () {
+    test('فاضي افتراضيًا — المسار المحلي هو الافتراضي دايمًا', () {
+      expect(StorageService.apiKey, isEmpty);
+    });
+
+    test('حفظ المفتاح ثم قراءته', () async {
+      await StorageService.setApiKey('AIzaSyTestKeyOnly1234567890');
+      expect(StorageService.apiKey, 'AIzaSyTestKeyOnly1234567890');
+    });
+
+    test('مسح المفتاح يرجّعه فاضي', () async {
+      await StorageService.setApiKey('AIzaSyTestKeyOnly1234567890');
+      expect(StorageService.apiKey, isNotEmpty);
+      await StorageService.setApiKey('');
+      expect(StorageService.apiKey, isEmpty);
+    });
+
+    // حارس انحدار: الإصدار السابق حذف هذا الحقل من الواجهة رغم أن البريف
+    // يمنع ذلك صراحةً. لو اتحذف تاني، الاختبار ده يفشل بدل ما نكتشف
+    // الاختفاء بالصدفة.
+    testWidgets('شاشة الإعدادات لازم تعرض حقل مفتاح Gemini وتحفظه فعليًا',
+        (tester) async {
+      await tester.pumpWidget(const MaterialApp(home: SettingsScreen()));
+      await tester.pumpAndSettle();
+
+      final field = find.byType(TextField);
+      expect(field, findsOneWidget,
+          reason: 'لازم يكون فيه حقل نصي واحد لمفتاح Gemini في الإعدادات');
+
+      await tester.enterText(field, 'AIzaSyWidgetTestKey000000000');
+      await tester.tap(find.widgetWithText(ElevatedButton, L.t('save_key')));
+      await tester.pumpAndSettle();
+
+      expect(StorageService.apiKey, 'AIzaSyWidgetTestKey000000000');
     });
   });
 }
