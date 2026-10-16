@@ -173,6 +173,13 @@ void main() {
       await tester.enterText(field, 'AIzaSyWidgetTestKey000000000');
       await tester.pump();
 
+      // تشخيص مؤقت: نتأكد هل القيمة فعلاً وصلت للـ controller ولا لأ،
+      // قبل ما نتهم منطق الحفظ. هيتشال بعد ما نلاقي السبب الحقيقي.
+      final typedValue =
+          (tester.widget<TextField>(field).controller)?.text ?? '<null>';
+      // ignore: avoid_print
+      print('DEBUG typedValue="$typedValue"');
+
       final saveButtonFinder =
           find.widgetWithText(ElevatedButton, L.t('save_key'));
       expect(saveButtonFinder, findsOneWidget,

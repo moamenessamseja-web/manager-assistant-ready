@@ -179,9 +179,17 @@ guessing at tap/scroll mechanics blind, rewrote the assertion to invoke the butt
 callback directly (`tester.widget<ElevatedButton>(finder).onPressed!()`) instead of a simulated
 tap gesture — this verifies the save *behavior* (entering text → pressing save → the key
 persists) without depending on pixel-accurate hit-testing in a scrolled `ListView`, which is the
-actual thing this regression guard needs to prove. Pushed as the next commit — check that run's
-conclusion; if this *also* fails, the bug is in `_saveKey`/`StorageService.setApiKey` itself, not
-in how the test taps, and needs real investigation rather than another test-mechanics tweak.
+actual thing this regression guard needs to prove.
+
+**Build #70: same failure, identical diff, even calling `onPressed` directly** — that rules out
+tap/scroll/hit-test mechanics entirely as a cause. Confirmed `StorageService.setApiKey`/`apiKey`
+themselves are correct in isolation (the 3 plain unit tests in this same group pass consistently
+across every build so far, #68/#69/#70 all green on those). So the break is specifically between
+`tester.enterText()` and `_saveKey()` reading `_keyCtrl.text` — not yet proven which side. Added
+one temporary `print('DEBUG typedValue="..."')` reading `(tester.widget<TextField>(field)
+.controller)?.text` right after `enterText` + `pump()`, to see directly whether the typed value
+ever reached the controller before blaming `_saveKey`. This print is temporary — remove it once
+the actual cause is found and fixed; don't leave debug prints in a merged test.
 
 ## Honest status
 §3, §4, §5, §6, §7, §8, §9, §11, §12 are implemented and were **verified locally in Session 2**
