@@ -1,18 +1,22 @@
 # Implementation State
 
-- **Brief:** `my best agint.md` (the original agent brief) + `sonnet_come_back.md`
-  (the active task that restored §9's API-key field — see Session 3 below).
-  `To Accio.md` is superseded.
-- **Baseline:** `main @ 2429a12` (= build #63, green) — resumed from here.
-- **Session 1 commit:** `196a2d7` → **build #64 green** (§3 + §4 + §9 + §5 safety + tests + docs).
-- **Session 2:** `06f89e6` → **build #65 green** (§6 + §7 + §8 + analyzer cleanup, one commit).
-- **Session 3 (this one):** restored the Gemini API-key Settings field that Session 1
-  removed — see "Session 3" section below for why and what changed.
-- **Verification (Session 2):** `flutter analyze` → **0 issues**; `flutter test --exclude-tags live`
-  → **42/42 pass**, with Flutter **3.47.7** (the CI version).
-- **Verification (Session 3):** not re-run locally — **no Flutter/Dart SDK in this sandbox**
-  (see "Session 3" section). Brace/paren balance checked by script; correctness relies on
-  the CI run for the pushed commit. Update this line once that run's result is known.
+- **Brief history:** `my best agint.md` (original agent brief) → `sonnet_come_back.md` (Session 3,
+  restored §9's API-key field) → `مهم_جدا_سونت.md` (2026-10-16 mission brief, the **current**
+  active task — see `HANDOFF.md` for the full roadmap and execution plan). `To Accio.md` is
+  superseded.
+- **Accepted baseline (user-confirmed):** `9f904c6` = **build #66**, tagged `baseline-build-66`.
+  The user manually installed this exact APK and confirmed it works. Treat this as the known-good
+  reference point for diffing or recovery — never force-push over it.
+- **Current `main` HEAD / recommended working baseline:** `003d8cb` = **build #74**, tagged
+  `baseline-build-74-ci-verified`. Same application behavior as build #66 (zero business-logic
+  changes between them — see that tag's message) but with CI now genuinely running
+  `flutter analyze` + `flutter test` before building, for the first time in this repo's history.
+  **Build #74 is green: real analyzer pass (55 pre-existing style-only infos, correctly
+  non-fatal; zero errors/warnings) and real test pass (46/46), then a successful APK.**
+- History: `main @ 2429a12` (build #63) → Session 1 `196a2d7` (build #64) → Session 2 `06f89e6`
+  (build #65) → Session 3 `9f904c6` (**build #66, user-accepted baseline**) → Session 3's CI-gap
+  chase, builds #67-73, all red/no-APK (see "CI gap closed" below for the full honest trail) →
+  `003d8cb` (**build #74, green, current recommended baseline**).
 
 ## §3 — Local command engine (done in `196a2d7`)
 `lib/models/command_result.dart` + `lib/services/local_command_parser.dart`: Arabic normalization
@@ -225,27 +229,102 @@ question — does a `StorageService._serialize` call genuinely hang when invoked
 `testWidgets` callback, and why — is real and worth a proper look with working Flutter tooling,
 even though it's no longer blocking this task.**
 
+**Build #74: green.** `flutter analyze --no-fatal-infos` passed, `flutter test --exclude-tags
+live` passed **46/46** (the narrowed widget test included), `flutter build apk --release`
+succeeded, APK published as GitHub release `build-74`. This is the first build in this repo's
+history where "tests passed" is an actual CI-verified fact rather than an inherited claim —
+tagged `baseline-build-74-ci-verified`. The `testWidgets`/`_serialize` open question above is
+still unresolved, but no longer blocking: the regression guard it was going to strengthen already
+does its job (catches the field being deleted again) without touching that code path.
+
 ## Honest status
-§3, §4, §5, §6, §7, §8, §9, §11, §12 are implemented. Session 2's "0 analyzer issues, 42/42
-tests" claim was **never actually CI-verified** — the workflow didn't run `flutter analyze`/
-`flutter test` until Session 3 added those steps (see "CI gap closed"), and this sandbox has no
+§3, §4, §5, §6, §7, §8, §9, §11, §12 (from the original agent brief) are implemented. Session 2's
+"0 analyzer issues, 42/42 tests" claim was **never actually CI-verified** — the workflow didn't
+run `flutter analyze`/`flutter test` until Session 3 added those steps, and this sandbox has no
 local Flutter/Dart SDK either, so take that specific Session 2 number as unverified history, not
-fact. What **is** now genuinely CI-verified: `flutter analyze` passes with `--no-fatal-infos` (55
-pre-existing style-only infos, zero errors/warnings, confirmed on build #68 onward); the offline
-test suite actually runs on every build now, for the first time ever in this repo. **Important
-correction, checked directly via the GitHub API rather than assumed:** builds #67-73 — every
-build between adding the analyze/test steps and fixing the widget test — have **no `build-N`
-release, only a `debug-N` log release**. That's correct, expected CI behavior, not a bug: this
-workflow's steps have no `if:` conditions, so a failed `flutter analyze`/`flutter test` step
-correctly skips the later `Build APK` step entirely — those 7 builds never produced an APK.
-**Build #66 is still the newest build with an actual installable APK.** This push (adding the
-fixed widget test) needs to go green before a new APK exists with the Gemini-key UI compiled in
-and analyzer/test-verified — check this run's conclusion and, if green, use its `build-N` release
-for the APK; if still red, there is still no verified APK newer than #66 and the next session
-should treat this exactly like any other "still pending CI" state, not assume success. The
-Gemini-key restoration itself (UI + strings + README) was verified by brace/paren balance checks,
-a scoped `git diff --stat`, and actual CI analyzer+test runs — not just a manual diff read. One
-item remains genuinely unresolved (see directly above): why `StorageService.setApiKey` didn't
-appear to execute when called from inside a `testWidgets` callback in builds #70-73, before the
-test was narrowed to avoid that path. Device-level checks (does a saved key actually reach a live
-Gemini call on a real phone) remain outstanding, as before Session 3.
+fact. **Build #74 is the first build in this repo's history with a real, CI-confirmed result:**
+`flutter analyze --no-fatal-infos` → 0 errors/warnings (55 pre-existing style-only infos, left
+non-fatal on purpose — see "CI gap closed"); `flutter test --exclude-tags live` → **46/46 pass**;
+`flutter build apk --release` → succeeded, APK published as release `build-74`
+(`baseline-build-74-ci-verified`). Builds #67-73 in between, while the CI gap and a ghost
+`test/widget_test.dart` file were being found and fixed, never produced an APK (checked directly
+via the GitHub API, not assumed) — expected, correct behavior given the workflow's steps have no
+`if:` conditions, so a failed analyze/test step correctly blocks the later build step. The
+Gemini-key restoration itself (`baseline-build-66`, user-confirmed on a real device) and the CI
+fixes on top of it (`baseline-build-74-ci-verified`) are both tagged and recoverable independent
+of whatever `main` does next. One item remains genuinely unresolved, not re-attempted: why
+`StorageService.setApiKey` didn't appear to execute when called from inside a `testWidgets`
+callback in builds #70-73 (see "CI gap closed" for the full trail) — worth a real look with
+working Flutter tooling, not currently blocking anything. Device-level checks (does a saved key
+actually reach a live Gemini call on a real phone) remain outstanding, as before Session 3. See
+`HANDOFF.md` for the current mission brief (`مهم_جدا_سونت.md`, 2026-10-16) and its 12-phase
+execution plan — only Phase A (baseline verification + safety references + this documentation
+update) is done; Phases B-F (the actual feature/bug-fix work) have not been started.
+
+## Future / deferred roadmap (mission brief `مهم_جدا_سونت.md`, received 2026-10-16)
+
+This is the **current active mission** — see `HANDOFF.md` for the full original text and
+execution order. Phase A (baseline + safety references + this doc) is done; **nothing below is
+implemented yet.** Recorded here per that brief's own §10 so a future session finds deferred work
+listed, not silently lost.
+
+1. **Chat command understanding (highest priority).** Typed + voice must share one pipeline;
+   local parsing must handle supported commands before Gemini; Gemini failure must never lose a
+   message or block manual entry; no duplicate transactions on retry; ambiguous financial
+   commands need clarification. Specific bug named: a delivery message mentioning multiple
+   names/products must not fabricate extra transactions, and "expected delivery" vs "completed
+   delivery" must be distinguished (commitment + reminder vs. immediate supplier/inventory
+   update). Not yet investigated against the real current parser behavior this session.
+2. **Automatic reminders/commitments from chat.** Must distinguish a conversational note vs. an
+   explicit reminder request vs. a future commitment vs. a completed transaction — currently
+   reportedly over-eager about scheduling. Ambiguous date/time must prompt for clarification, not
+   silently default. Not yet investigated.
+3. **Supplier archiving.** Archived suppliers must fully leave the Active list (state/filter fix,
+   not UI-only hiding) while staying visible under All/Archived, with history preserved; unarchive
+   must restore them. Not yet investigated.
+4. **Notification settings vs. notification center.** "Rules and Notifications" (side menu) and
+   the bell icon are reportedly conflated; need to confirm what each actually does, then make the
+   settings screen control real per-category/sound/timing preferences backed by the existing
+   notification infrastructure (no decorative no-op controls). Not yet investigated.
+5. **Memory screen's 4 cards.** Employees/Suppliers already navigate correctly; Reminders and
+   Commitments cards need to open their real screens (reuse existing routes, don't duplicate),
+   with back-nav, filters, and empty states verified, and no accidental writes on tap. Not yet
+   investigated.
+6. **Brief feature roadmap (documentation only for now).** The two current "Brief" entry points
+   (side menu + main screen) stay as-is functionally. Document here: the side-menu Brief is meant
+   to become a historical weekly/monthly business-statement/report view generated **from actual
+   stored records** (income/expenses, supplier purchases/payments/balances, employee
+   advances/deductions, attendance, commitments/overdue items; clear date ranges, totals,
+   subtotals, account-level detail) — not an AI-fabricated summary. The main-screen Brief may stay
+   a concise overview/entry point. PDF export/printing is a planned future capability, explicitly
+   **out of scope** until this is built. Do not let any small UI touch-up imply the full reporting
+   system already exists.
+7. **Offline-first + API key, both modes tested.** The brief restates Session 3's own fix (keep
+   the key field, test both "no key" and "key configured", don't bake in a dev key, no raw
+   exceptions shown in chat) — already satisfied by build #66/#74. New here: verify local commands
+   genuinely never hit the network, and that typed vs. transcribed voice text share one path. Not
+   yet re-verified against this specific wording.
+8. **Platform build environments — findings this session (Phase A only, no fix attempted):**
+   - `android/` has **never once appeared in this repo's git history** (`git log --all -- android/`
+     returns nothing) and isn't tracked now — confirmed **intentional**, not an accidental
+     deletion: `.gitignore` already has android-specific entries, and the CI workflow's own step
+     name says so directly ("Generate missing android/ scaffold (source zip lacked it)"). CI
+     regenerates it every run via `flutter create --platforms=android ...` — this is how the
+     `test/widget_test.dart` ghost-file bug this session found and fixed kept reappearing.
+   - `ios/` has **never existed** in this repo, and `.github/workflows/build-apk.yml` has **no
+     iOS/macOS job at all** (grepped directly — zero matches). iOS has never been attempted here,
+     not removed. Building it needs a macOS runner (GitHub-hosted `macos-*`) and Xcode signing
+     setup neither this session nor the current workflow has; don't claim an iOS build was
+     verified without one.
+9. **Testing/CI reliability.** Already addressed this session (see "CI gap closed" above):
+   `flutter analyze`/`flutter test` now actually run before the APK builds, a real pre-existing
+   bug (the ghost `test/widget_test.dart`) was found and fixed, and the new widget test is a real
+   regression guard rather than a brittle one papered over. Still open: focused tests for each
+   item 1-5 above once those are actually implemented (idempotency, ambiguous commands, reminder
+   date parsing, expected-vs-completed delivery, archive/unarchive, notification settings
+   effects, memory-card nav, Gemini-error chat behavior) — none of that exists yet because none
+   of items 1-5 have been implemented yet.
+10. **Documentation.** This section is that requirement, kept here rather than a second file, per
+    this project's existing single-state-file convention — `change_log.md` in the brief maps to
+    this repo's existing `CHANGELOG.md`; no second log file was created to avoid duplicating the
+    same history in two places.
