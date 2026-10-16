@@ -193,7 +193,15 @@ void main() {
       expect(saveButton.onPressed, isNotNull,
           reason: 'زرار الحفظ لازم يكون مفعّل (مش معطّل)');
       saveButton.onPressed!();
-      await tester.pumpAndSettle();
+      // pumpAndSettle() وحدها رجعت بدري في محاولات سابقة: بتعتبر الشاشة
+      // "استقرت" بمجرد ما مفيش فريم جديد متجدول، حتى لو فيه await لسه
+      // مش خلّص في الخلفية. بننبض بزمن حقيقي كذا مرة ونراقب القيمة
+      // الفعلية بدل ما نفترض إن pumpAndSettle كفاية.
+      for (var i = 0;
+          i < 20 && StorageService.apiKey != 'AIzaSyWidgetTestKey000000000';
+          i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
 
       expect(StorageService.apiKey, 'AIzaSyWidgetTestKey000000000');
     });
