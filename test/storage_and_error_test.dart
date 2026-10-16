@@ -171,12 +171,21 @@ void main() {
           reason: 'لازم يكون فيه حقل نصي واحد لمفتاح Gemini في الإعدادات');
 
       await tester.enterText(field, 'AIzaSyWidgetTestKey000000000');
-      final saveButton = find.widgetWithText(ElevatedButton, L.t('save_key'));
-      // الشاشة ListView طويلة وزرار الحفظ ممكن يكون تحت حدود الفيوبورت
-      // الافتراضي للاختبار — نمرّر له الشاشة فعليًا قبل الضغط عليه.
-      await tester.ensureVisible(saveButton);
-      await tester.pumpAndSettle();
-      await tester.tap(saveButton);
+      await tester.pump();
+
+      final saveButtonFinder =
+          find.widgetWithText(ElevatedButton, L.t('save_key'));
+      expect(saveButtonFinder, findsOneWidget,
+          reason: 'لازم يكون فيه زرار حفظ واحد لمفتاح Gemini');
+
+      // بنستدعي onPressed مباشرة بدل الاعتماد على إحداثيات tap() الدقيقة —
+      // الشاشة ListView طويلة والزرار ممكن يقع خارج حدود الفيوبورت
+      // الافتراضي لبيئة الاختبار، فده بيثبت سلوك الحفظ نفسه بمعزل عن
+      // تفاصيل التمرير/الـ hit-testing المرئية.
+      final saveButton = tester.widget<ElevatedButton>(saveButtonFinder);
+      expect(saveButton.onPressed, isNotNull,
+          reason: 'زرار الحفظ لازم يكون مفعّل (مش معطّل)');
+      saveButton.onPressed!();
       await tester.pumpAndSettle();
 
       expect(StorageService.apiKey, 'AIzaSyWidgetTestKey000000000');

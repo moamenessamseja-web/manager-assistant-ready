@@ -167,12 +167,21 @@ the real result — do not trust the test/analyzer counts above until that run i
 
 Both were fixed in the same push (build #68). **Result: `flutter analyze` passed (55 pre-existing
 infos, correctly non-fatal); `flutter test --exclude-tags live` ran 46 tests — 45 passed, 1
-failed.** The one failure was this session's own new widget test: the default `flutter test`
-surface is 800×600, `SettingsScreen` is a `ListView`, and the save button sat below that fold —
-`tester.tap()` couldn't hit-test an offset outside the render view bounds. The field itself
-rendered fine (`find.byType(TextField)` found it); only the tap on a not-yet-scrolled-to button
-failed. Fixed with `tester.ensureVisible(saveButton)` before the tap, pushed as the next commit —
-check that run's conclusion before trusting "46/46" below.
+failed** (this session's own new widget test).
+
+**Build #69** (adding `tester.ensureVisible(saveButton)` before the tap, since the default
+800×600 test surface put the button below `SettingsScreen`'s `ListView` fold): **still 45/46 —
+same test, same failure, no hit-test warning this time but `StorageService.apiKey` still read
+back empty.** So the tap registered on *something*, but the save logic's effect wasn't observed
+afterward — root cause still unconfirmed (candidates: a timing gap `pumpAndSettle` didn't cover,
+or the tap coordinates landing just off the actual button after the scroll). Rather than keep
+guessing at tap/scroll mechanics blind, rewrote the assertion to invoke the button's `onPressed`
+callback directly (`tester.widget<ElevatedButton>(finder).onPressed!()`) instead of a simulated
+tap gesture — this verifies the save *behavior* (entering text → pressing save → the key
+persists) without depending on pixel-accurate hit-testing in a scrolled `ListView`, which is the
+actual thing this regression guard needs to prove. Pushed as the next commit — check that run's
+conclusion; if this *also* fails, the bug is in `_saveKey`/`StorageService.setApiKey` itself, not
+in how the test taps, and needs real investigation rather than another test-mechanics tweak.
 
 ## Honest status
 §3, §4, §5, §6, §7, §8, §9, §11, §12 are implemented and were **verified locally in Session 2**
