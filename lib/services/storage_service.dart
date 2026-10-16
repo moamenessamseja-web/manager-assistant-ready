@@ -251,8 +251,9 @@ class StorageService {
       reminders().where((r) => r.relatedEntityId == entityId).toList();
 
   // ---------------- Settings ----------------
-  /// مفتاح الخدمة الإضافية الاختيارية. فاضي افتراضيًا، ومفيش أي حقل في
-  /// واجهة المستخدم لإدخاله (§9). وجوده هنا فقط للمسار الاختياري.
+  /// مفتاح الخدمة الإضافية الاختيارية. فاضي افتراضيًا، وله حقل في شاشة
+  /// الإعدادات لإدخال مفتاح المستخدم نفسه (§8/§9). المحرك المحلي يفضل
+  /// شغال بالكامل غيابه، ووجوده بيفتح مسار Gemini كاحتياطي فقط.
   static String get apiKey => _p.getString('gemini_api_key') ?? '';
 
   static Future<void> setApiKey(String v) => _serialize(() async {

@@ -45,12 +45,7 @@ class _S extends State<SettingsScreen> {
   Future<void> _saveKey() async {
     setState(() => _saving = true);
     try {
-      final v = _keyCtrl.text.trim();
-      // ignore: avoid_print
-      print('DEBUG _saveKey about to save v="$v"');
-      await StorageService.setApiKey(v);
-      // ignore: avoid_print
-      print('DEBUG _saveKey after await, apiKey="${StorageService.apiKey}"');
+      await StorageService.setApiKey(_keyCtrl.text.trim());
     } finally {
       if (mounted) setState(() => _saving = false);
     }
