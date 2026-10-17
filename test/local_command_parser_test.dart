@@ -93,11 +93,56 @@ void main() {
       expect(r.fields['person'].toString().contains('سالم'), isTrue);
     });
 
+
     test('«سالم جاب بضاعة بخمسة آلاف»', () {
       final r = LocalCommandParser.parse('سالم جاب بضاعة بخمسة آلاف');
       expect(r.intent, 'record_purchase');
       expect(r.fields['person'], 'سالم');
       expect(r.fields['purchase_total'], 5000);
+      // فعل «جاب» نفسه ما يتحسبش اسم وهمي تاني (كان بيحصل قبل الإصلاح).
+      expect((r.fields['people'] as List?) ?? const [], isEmpty);
+    });
+
+    // مثال البريف بالظبط (مهمة_2026-10-16 §1): توريد مكتمل بكمية بس من غير
+    // قيمة مذكورة صراحةً. قبل الإصلاح كان بيحصل خطآن مركّبان:
+    // 1) الكمية (٢٠) كانت بتُفسَّر غلط كقيمة توريد = ٢٠ جنيه.
+    // 2) «المورد» (الكلمة الوظيفية العامة) كانت بتُستخرج كاسم مستقل، فيحصل
+    //    تنفيذ العملية مرتين — مرة لـ«المورد» ومرة لـ«عجمي».
+    test('«المورد عجمي جاب الآن ٢٠ كيلو سكر» — كمية من غير قيمة: لا تخمين ولا تكرار',
+        () {
+      final r =
+          LocalCommandParser.parse('المورد عجمي جاب الآن ٢٠ كيلو سكر');
+      expect(r.intent, 'record_purchase');
+      // اسم واحد بس: «عجمي» — مش «المورد» ومش الاتنين.
+      expect(r.fields['person'], 'عجمي');
+      expect((r.fields['people'] as List?) ?? const [], isEmpty);
+      // الكمية اتسجلت صح كـ«كمية»، مش كقيمة مالية.
+      expect(r.fields['purchase_quantity'], 20);
+      expect(r.fields['purchase_unit'], 'كيلو');
+      // ومفيش قيمة اتخمّنت من عدم — ده لازم يخلّي الأمر غير واثق فيسأل.
+      expect(r.fields['amount'], isNull);
+      expect(r.fields['purchase_total'], isNull);
+      expect(r.confident, isFalse);
+      expect(r.clarification, isNotNull);
+    });
+
+    test('«المورد عجمي دفع كذا» ما زال بيميّز اسم المورد الحقيقي من «المورد»',
+        () {
+      final r = LocalCommandParser.parse('دفعت للمورد عجمي 500 جنيه');
+      expect(r.intent, 'add_supplier_payment');
+      expect(r.fields['person'], 'عجمي');
+      expect(r.fields['amount'], 500);
+    });
+
+    test('كمية+وحدة مع قيمة صريحة لسه بتتسجل صح (مفيش تأثير جانبي للإصلاح)',
+        () {
+      final r =
+          LocalCommandParser.parse('سالم جاب 20 كيلو سكر بـ300 جنيه');
+      expect(r.intent, 'record_purchase');
+      expect(r.fields['purchase_quantity'], 20);
+      expect(r.fields['purchase_unit'], 'كيلو');
+      expect(r.fields['purchase_total'], 300);
+      expect(r.confident, isTrue);
     });
   });
 

@@ -105,8 +105,18 @@ class LocalCommandParser {
       usedIndices.addAll(qu.indices);
     }
 
-    // المبلغ: من الأرقام أو من كلمات الأعداد
-    final amount = _pickAmount(n, w, numbers);
+    // المبلغ: من الأرقام أو من كلمات الأعداد.
+    // مهم: الرقم اللي اتستخدم بالفعل ككمية (زي الـ«20» في «20 كيلو») لازم
+    // يُستبعد من مرشحي المبلغ المالي — وإلا هيتفسّر غلط كقيمة بالجنيه لمجرد
+    // إنه الرقم الوحيد في الجملة (البق اللي ظهر مع «جاب الآن ٢٠ كيلو سكر»:
+    // كان بيسجل توريد بقيمة ٢٠ جنيه بدل ما يسأل عن القيمة الحقيقية).
+    final qtyIndex = qu == null
+        ? null
+        : qu.indices.reduce((a, b) => a < b ? a : b); // فهرس رقم الكمية نفسه
+    final numbersForAmount = qtyIndex == null
+        ? numbers
+        : numbers.where((x) => x.start != qtyIndex).toList();
+    final amount = _pickAmount(n, w, numbersForAmount);
     if (amount != null) f['amount'] = amount;
 
     // الأسماء
@@ -377,7 +387,13 @@ class LocalCommandParser {
   }
 
   /// أسماء الأشخاص: أي كلمة عربية متبقية بعد استبعاد الكلمات الوظيفية
-  /// والأرقام والوحدات والوظائف. «و» المنفصلة تفصل بين الأسماء.
+  /// والأرقام والوحدات والوظائف.
+  ///
+  /// **مهم (إصلاح بَق تعدد الأسماء الوهمي):** بنرجّع أول مرشح دايمًا كاسم
+  /// أساسي، لكن ما بنضيفش مرشح تاني لقائمة «الأسماء المتعددة» إلا لو كان
+  /// متصل بالمرشح اللي قبله بواو عطف واحدة بالظبط («محمود و خالد و حسن»).
+  /// أي كلمة عربية فاضلة تانية في الجملة (زي اسم صنف «سكر» في «جاب 20 كيلو
+  /// سكر») بتتجاهل كاسم تاني بدل ما تتحوّل لشخص وهمي يتنفذ عليه نفس الأمر.
   static List<String> _names(
       List<String> w, List<_Num> nums, Set<int> extraUsed) {
     final used = <int>{...extraUsed};
@@ -385,24 +401,52 @@ class LocalCommandParser {
       used.add(num.start);
       used.add(num.end);
     }
-    final out = <String>[];
+    final candidates = <int, String>{};
     for (var i = 0; i < w.length; i++) {
       if (used.contains(i)) continue;
       var tok = w[i];
       if (tok.length < 2) continue;
-      if (_stop.contains(tok)) continue;
+      if (_isStopToken(tok)) continue;
       // بادئة شائعة ملتصقة: «لسالم» → «سالم»، «بأحمد» → «أحمد».
       tok = _stripClitic(tok);
-      if (_stop.contains(tok)) continue;
+      if (_isStopToken(tok)) continue;
       if (_units.contains(tok)) continue;
       if (_roles.contains(tok)) continue;
       if (!RegExp(r'^[\u0621-\u064A]{2,}$').hasMatch(tok)) continue;
-      out.add(tok);
+      candidates[i] = tok;
     }
-    // «علي» كلمة وظيفية (على) واسم شخص شائع في نفس الوقت — لو مفيش أي
-    // مرشح تاني، نعتبرها اسمًا بدل ما نتجاهل الأمر.
-    if (out.isEmpty && w.contains('علي')) out.add('علي');
+    if (candidates.isEmpty) {
+      // «علي» كلمة وظيفية (على) واسم شخص شائع في نفس الوقت — لو مفيش أي
+      // مرشح تاني، نعتبرها اسمًا بدل ما نتجاهل الأمر.
+      return w.contains('علي') ? const ['علي'] : const [];
+    }
+    final indices = candidates.keys.toList()..sort();
+    final out = <String>[candidates[indices.first]!];
+    var last = indices.first;
+    for (final i in indices.skip(1)) {
+      if (i == last + 2 && w[last + 1] == 'و') {
+        out.add(candidates[i]!);
+        last = i;
+      } else {
+        // مش متصلة بواو عطف مباشرة — كلمة فاضلة (غالبًا اسم صنف)، مش شخص
+        // إضافي. نوقف هنا ونسيب الباقي.
+        break;
+      }
+    }
     return out;
+  }
+
+  /// هل الكلمة كلمة وظيفية (تُستبعد من استخراج الأسماء)؟ بيراعي أل التعريف
+  /// الملتصقة بكلمة وظيفية معروفة أصلاً — زي «المورد» (= «مورد» + «ال»)،
+  /// «الموظف»، إلخ. مُطبَّق فقط لو الباقي بعد شطب «ال» كلمة وظيفية معروفة
+  /// بالفعل، عشان ما نتلفش أسماء أشخاص حقيقية بتبدأ بـ«ال» زي «الحسيني».
+  static bool _isStopToken(String tok) {
+    if (_stop.contains(tok)) return true;
+    if (tok.length > 4 && tok.startsWith('ال')) {
+      final rest = tok.substring(2);
+      if (_stop.contains(rest)) return true;
+    }
+    return false;
   }
 
   /// تقصّ اللاصقة الأمامية (ل/ب) من الكلمة الملتصقة (زي «لسالم» → «سالم»)
@@ -734,6 +778,12 @@ class LocalCommandParser {
     'استلمت',
     'وصل',
     'وصلت',
+    // فعلا «جاب»/«سلم» بيحدّدوا نية record_purchase لكن ما كاناش مستبعدين من
+    // استخراج الأسماء — فكان بيتكوّن اسم تاني وهمي من الفعل نفسه (مثلاً
+    // «سالم جاب بضاعة...» كانت بتطلع أسماء: سالم + جاب)، وده بيخلي العملية
+    // تتنفذ مرتين لشخصين، واحد منهم مش حقيقي.
+    'جاب',
+    'سلم',
     'متوقع',
     'متوقعه',
     'هيجي',
