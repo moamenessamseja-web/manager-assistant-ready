@@ -6,6 +6,12 @@ is preserved at `.agent/mission_2026-10-16.md`.
 
 ## Where things stand right now
 
+> **UPDATE 2026-10-17 (Session 4):** the owner's starting point is now commit **`32df13f` = Build 75**
+> (tag `baseline-build-75-user-confirmed`). `main` HEAD `25dbffe` = Build 76 is **untrusted** (owner
+> reported wrong behavior; tag `build-76-untrusted`). Work continues on branch `phase-b/from-32df13f`.
+> See "Session 4" in `.agent/IMPLEMENTATION_STATE.md` for the review findings and next steps.
+> The text below predates this and is kept for history.
+
 - **User-confirmed working baseline:** commit `9f904c6`, tag `baseline-build-66`, GitHub release
   `build-66`. The user manually installed this exact APK and confirmed it works. Never
   force-push or rewrite history over this commit.

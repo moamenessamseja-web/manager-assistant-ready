@@ -1,5 +1,15 @@
 # Implementation State
 
+> **SESSION 4 OVERRIDE (2026-10-17) — read before anything below.**
+> - **Owner-designated starting point: `32df13f` = Build 75** (tag `baseline-build-75-user-confirmed`).
+>   Its application code is identical to `003d8cb`/build #74 (docs-only commit on top). The owner
+>   installed APK 75 manually.
+> - **Build 76 = `25dbffe` is UNTRUSTED** (tag `build-76-untrusted`): a Phase B parser change. CI is
+>   green (analyze + tests), but the owner installed it and reported wrong behavior. `main` still points
+>   at it; nothing was force-pushed or rewritten. Phase B is continuing on branch
+>   `phase-b/from-32df13f`, cherry-picking only what survives review.
+> - Older lines below that say "Phase B not started" or name `003d8cb` as HEAD are historical.
+
 - **Brief history:** `my best agint.md` (original agent brief) → `sonnet_come_back.md` (Session 3,
   restored §9's API-key field) → `مهم_جدا_سونت.md` (2026-10-16 mission brief, the **current**
   active task — see `HANDOFF.md` for the full roadmap and execution plan). `To Accio.md` is
@@ -328,3 +338,39 @@ listed, not silently lost.
     this project's existing single-state-file convention — `change_log.md` in the brief maps to
     this repo's existing `CHANGELOG.md`; no second log file was created to avoid duplicating the
     same history in two places.
+
+
+## Session 4 (2026-10-17) — Phase B re-start from 32df13f
+**Status: audit only, NO application code changed this session so far.**
+
+Verified facts (from `git`/GitHub API, not assumed): runs #74, #75, #76 all green; release `build-75`
+and `build-76` each have `app-release.apk`; `25dbffe` touches only `lib/services/local_command_parser.dart`
+and `test/local_command_parser_test.dart`. Neither this state file nor HANDOFF was updated after
+`25dbffe` (documentation gap, fixed here).
+
+Review of `25dbffe` (by reading code; **not run** — no Dart SDK in this environment):
+1. KEEP (logic sound): excluding the quantity's number index from `_pickAmount` candidates (fixes
+   `20 كيلو` being read as 20 EGP); adding `جاب`/`سلم` to stop words; `_isStopToken` stripping `ال`.
+2. **REGRESSION RISK:** the rewritten `_names()` only accepts a second person when joined by a
+   *separate* `و` token (`محمود و خالد`). Typed/dictated Arabic normally attaches it
+   (`محمود وخالد`): the second name is now **silently dropped** (one person marked, no warning).
+   `_stripClitic` handles only `ل`/`ب`, never `و`. Violates "no silent guessing".
+3. **Behavior change that may be what the owner saw as wrong:** `المورد عجمي جاب الآن ٢٠ كيلو سكر`
+   now returns not-confident and asks for the value (previously it saved 20 EGP). Owner intent for a
+   *completed* delivery with quantity but no price is not yet decided (ask vs. save quantity-only).
+   **Open owner question.**
+4. Pre-existing, unfixed (verified in `assistant_controller._supplierDelivery`): when no date is parsed
+   the expected date silently defaults to **tomorrow** and reminder to date−2h (mission item 2 bug);
+   missing suppliers are auto-created from any name.
+5. Pre-existing, unfixed: `_detectIntent` expected-delivery triggers are only `متوقع/هيجي/هتجي/هيوصل/
+   هتوصل`. `هيجيب`/`هتجيب` (the master spec's own example `جمال هيجيب بكرة ٥ كراتين لبن`) are not
+   recognized as expected delivery. `create_commitment` is always `confident: true`.
+6. Branch builds via `workflow_dispatch` publish a `build-N` release that `gh release create` targets at
+   default-branch HEAD (mislabel risk). Treat branch APKs as test-only.
+
+Next (Phase B order, each with regression tests): (a) attached-`و` multi-name support; (b) decide
+completed-delivery-without-price rule; (c) `هيجيب`-family expected delivery + no-date → ask, never
+default; (d) idempotency guard on retries. Items 2-9 of the mission remain **Not started**.
+
+Security: a classic GitHub PAT was pasted in chat this session. It is not written to any file; the
+clone used a transient auth header. Owner should revoke it.
