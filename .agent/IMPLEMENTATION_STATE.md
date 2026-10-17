@@ -341,7 +341,7 @@ listed, not silently lost.
 
 
 ## Session 4 (2026-10-17) — Phase B re-start from 32df13f
-**Status: audit only, NO application code changed this session so far.**
+**Status: startup fix applied on branch `phase-b/from-32df13f` (commit `16e09ec`, CI build #78 green). Parser/Phase-B behavior work NOT started yet.**
 
 Verified facts (from `git`/GitHub API, not assumed): runs #74, #75, #76 all green; release `build-75`
 and `build-76` each have `app-release.apk`; `25dbffe` touches only `lib/services/local_command_parser.dart`
@@ -374,3 +374,26 @@ default; (d) idempotency guard on retries. Items 2-9 of the mission remain **Not
 
 Security: a classic GitHub PAT was pasted in chat this session. It is not written to any file; the
 clone used a transient auth header. Owner should revoke it.
+
+
+### Session 4 — Build 76 black screen: diagnosis and fix (owner report: APK 76 shows only a black screen)
+Evidence (static APK analysis; no device log available):
+- APK 75/76/77 have identical `libflutter.so`, `AndroidManifest.xml`, `resources.arsc` → same engine/Flutter.
+- Experiment: CI run #77 built the branch whose app code == Build 75. APK 77 is byte-size identical to
+  APK 76 (57,862,395) with zero difference in Dart identifiers, and differs from APK 75. So the parser
+  commit `25dbffe` is **not** the cause of the black screen.
+- The difference is the SharedPreferences plugin path: APK 75 = legacy Pigeon channels
+  (`dev.flutter.pigeon.shared_preferences_android...getAll`); APK 76/77 = `SharedPreferencesApiForNativeInterop`
+  (JNI). Plugin changelog: `shared_preferences_android` **2.5.0 = "Pigeon JNI"**. `pubspec.lock` pins 2.4.28
+  yet CI resolved 2.5.0 → CI was not reproducible. Why the lock was not honored is **unknown**.
+- `main()` awaited `StorageService.init()` etc. with no guard before `runApp`, so any throw/hang there =
+  permanent black screen (verified in code). **Leading hypothesis (unproven): JNI init failure on the
+  owner's device.** Possibly related to the unresolved Build 70-73 `testWidgets` hang (speculation).
+Fix (`16e09ec`): `dependency_overrides: shared_preferences_android: 2.4.28`; `main()` now shows a readable
+Arabic error screen (with selectable technical text) instead of a black screen if storage init fails/times
+out (15 s); CI step fails the build if the resolved version != 2.4.28.
+Verified: CI #78 green (analyze, 46 tests, APK). APK 78 string check: legacy Pigeon path present, JNI
+path absent (matches 75). **NOT verified: that APK 78 opens on the owner's device.**
+Other findings: CI debug-signs APKs with a per-runner key → installing a new APK over an old one may be
+refused (uninstall wipes local data). Fixed release keystore is a future P1 item. Branch builds publish
+`build-N` releases (#77, #78 are branch builds).

@@ -52,3 +52,11 @@
 - MVP: commitments, staff, attendance, advances, local notifications, Arabic voice input.
 - Gemini REST API with structured JSON output.
 - Local API key storage; no key shipped in source.
+
+## Session 4 — 2026-10-17 (branch `phase-b/from-32df13f`)
+- `16e09ec`: pin `shared_preferences_android` to 2.4.28 (dependency_overrides); startup failures now show
+  a readable error screen instead of a black screen; CI guard fails on plugin version drift.
+  CI #78 green. Device behavior of APK 78 not yet confirmed by the owner.
+- Docs: Build 75 (`32df13f`) designated as start; Build 76 (`25dbffe`) marked untrusted (tags
+  `baseline-build-75-user-confirmed`, `build-76-untrusted`).
+
