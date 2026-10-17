@@ -522,22 +522,6 @@ class LocalCommandParser {
     return null;
   }
 
-  /// تاريخ نسبي مبدئي (بكرة/النهاردة/بعد بكرة) بصيغة YYYY-MM-DD.
-  static String? _relativeDate(String n) {
-    final now = DateTime.now();
-    DateTime d;
-    if (n.contains('بعد بكره') || n.contains('بعد بكرة')) {
-      d = now.add(const Duration(days: 2));
-    } else if (n.contains('بكره') || n.contains('بكرة') || n.contains('غدا')) {
-      d = now.add(const Duration(days: 1));
-    } else if (n.contains('النهارده') || n.contains('اليوم')) {
-      d = now;
-    } else {
-      return null;
-    }
-    return d.toIso8601String().substring(0, 10);
-  }
-
   // ───────────────────── التاريخ والساعة (بدون أي افتراض) ─────────────────────
 
   static const Map<String, int> _months = {
