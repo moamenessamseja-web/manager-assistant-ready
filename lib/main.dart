@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'services/storage_service.dart';
@@ -14,11 +16,20 @@ import 'design/strings.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await StorageService.init();
-  await AppErrorService.init();
-  await ChatHistoryService.init();
-  await SettingsService.init();
-  tz.initializeTimeZones();
+  // أي فشل أو تعليق في تهيئة التخزين كان بيسيب الشاشة سوداء للأبد لأن runApp
+  // ما كانتش بتتنادى (APK 76). دلوقتي بنعرض رسالة خطأ مقروءة بدل الشاشة السوداء.
+  try {
+    await StorageService.init().timeout(const Duration(seconds: 15));
+    await AppErrorService.init();
+    await ChatHistoryService.init();
+    await SettingsService.init();
+    tz.initializeTimeZones();
+  } catch (e) {
+    final msg = e.toString();
+    runApp(_StartupErrorApp(
+        details: msg.length > 400 ? msg.substring(0, 400) : msg));
+    return;
+  }
   // بدء خدمات التنبيهات — أي فشل هنا لا يمنع فتح التطبيق ولا يعطّل أي عملية
   // محلية، والتفاصيل التقنية تُسجَّل محليًا فقط (§6/§8).
   try {
@@ -30,6 +41,43 @@ Future<void> main() async {
     AppErrorService.log('startup', e, st);
   }
   runApp(const ManagerApp());
+}
+
+/// شاشة بدء طارئة: تظهر فقط لو فشلت تهيئة التخزين، بدل شاشة سوداء صامتة.
+class _StartupErrorApp extends StatelessWidget {
+  final String details;
+  const _StartupErrorApp({required this.details});
+  @override
+  Widget build(BuildContext context) => MaterialApp(
+        debugShowCheckedModeBanner: false,
+        home: Directionality(
+          textDirection: TextDirection.rtl,
+          child: Scaffold(
+            body: SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('تعذّر بدء التطبيق',
+                          style: TextStyle(
+                              fontSize: 22, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 12),
+                      const Text(
+                          'حصلت مشكلة أثناء تجهيز التخزين المحلي. بياناتك لم تُمسح. '
+                          'صوّر هذه الشاشة وابعتها للمطوّر.'),
+                      const SizedBox(height: 16),
+                      SelectableText(details,
+                          textDirection: TextDirection.ltr),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
 }
 
 class ManagerApp extends StatelessWidget {

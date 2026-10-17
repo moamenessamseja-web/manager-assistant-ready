@@ -15,6 +15,13 @@ dependencies:
   uuid: ^4.5.1
   image_picker: ^1.1.2
   path_provider: ^2.1.4
+# Pinned on purpose (Session 4): shared_preferences_android 2.5.0 switched to
+# "Pigeon JNI" and appeared between CI run #75 and #76 even though pubspec.lock
+# says 2.4.28. APK 76 (and 77, built from Build-75 source) showed a black screen.
+# Do not unpin without a real-device test.
+dependency_overrides:
+  shared_preferences_android: 2.4.28
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

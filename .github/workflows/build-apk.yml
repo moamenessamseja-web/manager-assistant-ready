@@ -146,6 +146,12 @@ jobs:
 
       - run: flutter pub get
 
+      - name: Guard — dependency drift (shared_preferences_android must stay 2.4.28)
+        run: |
+          v=$(awk '/^  shared_preferences_android:/{f=1} f && /version:/{print $2; exit}' pubspec.lock | tr -d '"')
+          echo "resolved shared_preferences_android=$v"
+          test "$v" = "2.4.28"
+
       - name: Static analysis (flutter analyze)
         run: |
           set -o pipefail
