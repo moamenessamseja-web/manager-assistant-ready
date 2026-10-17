@@ -16,6 +16,10 @@ jobs:
 
       - uses: subosito/flutter-action@v2
         with:
+          # Pinned (Session 4): build #81 (green) ran Flutter 3.47.7 / Dart 3.13.5. Unpinned 'stable'
+          # silently changed plugin resolution between #75 and #76 and broke the app (black screen).
+          # Bump deliberately, with a device test.
+          flutter-version: '3.47.7'
           channel: 'stable'
 
       - name: Toolchain fingerprint (recorded in the release notes)
