@@ -18,7 +18,12 @@ jobs:
         with:
           channel: 'stable'
 
-      - run: flutter --version
+      - name: Toolchain fingerprint (recorded in the release notes)
+        run: |
+          flutter --version 2>&1 | tee toolchain.txt
+          echo "" >> toolchain.txt
+          echo "pubspec.lock shared_preferences_android:" >> toolchain.txt
+          grep -A6 '^  shared_preferences_android:' pubspec.lock >> toolchain.txt || true
 
       - name: Generate missing android/ scaffold (source zip lacked it)
         run: |
@@ -179,8 +184,12 @@ jobs:
           TAG="build-${{ github.run_number }}"
           gh release create "$TAG" \
             "build/app/outputs/flutter-apk/app-release.apk" \
+            --target "${{ github.sha }}" \
             --title "Manager Assistant APK build #${{ github.run_number }}" \
-            --notes "Automated release build from commit ${{ github.sha }}"
+            --notes "Automated release build from commit ${{ github.sha }} (branch ${{ github.ref_name }}).
+
+          Toolchain:
+          $(cat toolchain.txt)"
 
       - name: Upload build log on failure
         if: failure()
