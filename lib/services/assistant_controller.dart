@@ -29,7 +29,31 @@ class AssistantController {
   /// 4) رسالة واضحة لو ما فهمناش.
   ///
   /// ممنوع أن يؤدي غياب الإنترنت أو مفتاح API إلى تعطيل أي عملية محلية.
+  static String? _lastKey;
+  static DateTime? _lastAt;
+  static String _lastReply = '';
+
   static Future<String> handle(String text) async {
+    // حماية من تكرار الإرسال (ضغطتين/إعادة محاولة): نفس النص خلال ٨ ثواني
+    // بعد تنفيذ ناجح ما يتنفّذش تاني — عشان ما تتسجلش سلفة/دفعة مرتين.
+    final key = LocalCommandParser.normalize(text.trim());
+    final last = _lastAt;
+    if (key.isNotEmpty &&
+        key == _lastKey &&
+        last != null &&
+        DateTime.now().difference(last) < const Duration(seconds: 8) &&
+        _lastReply.contains('✅')) {
+      return '⚠️ نفس الأمر اتنفّذ من ثواني ومش هكرره عشان ما يتسجلش مرتين. '
+          'لو عايزه فعلًا تاني ابعته بعد شوية.';
+    }
+    final reply = await _handleInner(text);
+    _lastKey = key;
+    _lastAt = DateTime.now();
+    _lastReply = reply;
+    return reply;
+  }
+
+  static Future<String> _handleInner(String text) async {
     final t = text.trim();
     if (t.isEmpty) return 'اكتب أو قولّي عايز تعمل إيه.';
 
@@ -68,7 +92,9 @@ class AssistantController {
     String text,
     String? clarification,
   ) async {
+    fields = Map<String, dynamic>.from(fields);
     final intent = fields['intent'] as String;
+    _normalizeRemindAt(fields);
 
     // عدة أشخاص (بمعرّفات محفوظة أو بأسماء) — يُنفَّذ على كل سجل ثم تُجمَع النتائج.
     final ids = <String>[
@@ -107,13 +133,17 @@ class AssistantController {
 
     final missing = _missingFor(intent, fields);
     if (missing.isNotEmpty) {
+      final stored = Map<String, dynamic>.from(fields)..remove('intent');
+      // موعد فات/ناقص: ما نحتفظش بقيمة قديمة تتسرّب للتنفيذ.
+      if (missing.contains('due_date')) stored.remove('due_date');
+      if (missing.contains('time')) stored.remove('time');
       await ConversationContextService.setPending(PendingOperation(
         intent: intent,
-        fields: Map<String, dynamic>.from(fields)..remove('intent'),
+        fields: stored,
         missing: missing,
         createdAt: DateTime.now(),
       ));
-      return clarification ?? _askFor(missing);
+      return clarification ?? _askFor(missing, fields);
     }
     await ConversationContextService.clearPending();
     return _safeDispatch(intent, fields, text);
@@ -180,9 +210,15 @@ class AssistantController {
         (f['person_ids'] as List?)?.isNotEmpty == true;
     final hasAmount = ((f['amount'] as num?)?.toDouble() ?? 0) > 0;
     switch (intent) {
+      case 'supplier_delivery':
+        return [
+          if (!hasName) 'person',
+          ..._whenMissing(f),
+        ];
+      case 'create_commitment':
+        return _whenMissing(f);
       case 'mark_attendance':
       case 'add_supplier':
-      case 'supplier_delivery':
       case 'mark_delivery_received':
         return hasName || (f['person_ids'] as List?)?.isNotEmpty == true
             ? const []
@@ -211,8 +247,58 @@ class AssistantController {
     }
   }
 
-  static String _askFor(List<String> missing) {
+  /// يوم + ساعة صريحين ومستقبليين — مفيش افتراض «بكرة» ولا ساعة من عندنا.
+  static List<String> _whenMissing(Map<String, dynamic> f) {
+    final hasDay = _hasVal(f['due_date']);
+    final hasTime = _hasVal(f['time']);
+    if (hasDay && hasTime) {
+      final due = _dueFrom(f);
+      if (due == null ||
+          due.isBefore(DateTime.now().subtract(const Duration(minutes: 1)))) {
+        return const ['due_date', 'time'];
+      }
+      return const [];
+    }
+    return [
+      if (!hasDay) 'due_date',
+      if (!hasTime) 'time',
+    ];
+  }
+
+  /// يبني الموعد من due_date (YYYY-MM-DD) + time (HH:mm). null لو ناقص/غلط.
+  static DateTime? _dueFrom(Map<String, dynamic> d) {
+    final ds = (d['due_date'] ?? '').toString();
+    final ts = (d['time'] ?? '').toString();
+    final day = DateTime.tryParse(ds.length >= 10 ? ds.substring(0, 10) : ds);
+    final m = RegExp(r'^(\d{1,2}):(\d{2})$').firstMatch(ts);
+    if (day == null || m == null) return null;
+    final hh = int.parse(m.group(1)!);
+    final mm = int.parse(m.group(2)!);
+    if (hh > 23 || mm > 59) return null;
+    return DateTime(day.year, day.month, day.day, hh, mm);
+  }
+
+  /// Gemini ممكن يرجّع remind_at كاملة (تاريخ+وقت): نحوّلها ليوم + ساعة.
+  static void _normalizeRemindAt(Map<String, dynamic> f) {
+    if (_hasVal(f['time'])) return;
+    final ra = DateTime.tryParse(
+        (f['remind_at'] ?? '').toString().replaceFirst(' ', 'T'));
+    if (ra == null) return;
+    String two(int v) => v.toString().padLeft(2, '0');
+    f['time'] = '${two(ra.hour)}:${two(ra.minute)}';
+    if (!_hasVal(f['due_date'])) {
+      f['due_date'] = '${ra.year.toString().padLeft(4, '0')}-${two(ra.month)}-${two(ra.day)}';
+    }
+  }
+
+  static String _askFor(List<String> missing, [Map<String, dynamic>? f]) {
     final parts = <String>[];
+    if (missing.contains('due_date')) parts.add('اليوم أو التاريخ');
+    if (missing.contains('time')) {
+      parts.add(f?['time_hour_raw'] != null
+          ? 'الساعة ${f!['time_hour_raw']} صباحًا ولا مساءً'
+          : 'الساعة كام');
+    }
     if (missing.contains('person')) parts.add('اسم الموظف/المورد');
     if (missing.contains('employee_name')) parts.add('اسم الموظف');
     if (missing.contains('amount')) parts.add('المبلغ');
@@ -259,6 +345,18 @@ class AssistantController {
     }
 
     final merged = Map<String, dynamic>.from(p.fields);
+    // رد قصير («٣٠٠» / «بكرة الساعة ٥ العصر» / «مساء») مش أمر كامل، فبنستخرج
+    // منه الخانات الناقصة مباشرة.
+    final slots = LocalCommandParser.extractSlots(text,
+        expect: p.missing.toSet(),
+        hourHint: (p.fields['time_hour_raw'] as num?)?.toInt());
+    for (final e in slots.entries) {
+      if (e.key == 'time_hour_raw' && _hasVal(merged['time'])) continue;
+      if (!_hasVal(merged[e.key]) || p.missing.contains(e.key)) {
+        merged[e.key] = e.value;
+      }
+    }
+    if (_hasVal(merged['time'])) merged.remove('time_hour_raw');
     for (final e in parsed.fields.entries) {
       if (e.key == 'text_original' || e.key == 'intent') continue;
       if (!_hasVal(merged[e.key]) || p.missing.contains(e.key))
@@ -272,7 +370,7 @@ class AssistantController {
     }
     await ConversationContextService.setPending(
         p.copyWith(fields: merged, missing: still));
-    return _askFor(still);
+    return _askFor(still, merged);
   }
 
   static ContextPerson? _pickOption(String n, List<ContextPerson> options) {
@@ -315,26 +413,10 @@ class AssistantController {
   /// يرجع الرقم المذكور في النص **فقط لو كان رقمًا واحدًا** (أرقام عربية أو
   /// هندية أو إنجليزية). لو فيه أكتر من رقم، يرجع null — لأن الاختيار هيكون تخمين.
   static double? _singleNumberInText(String text) {
-    const ar = '٠١٢٣٤٥٦٧٨٩';
-    const fa = '۰۱۲۳۴۵۶۷۸۹';
-    final buf = StringBuffer();
-    for (final rune in text.runes) {
-      final ch = String.fromCharCode(rune);
-      final ai = ar.indexOf(ch);
-      final fi = fa.indexOf(ch);
-      if (ai >= 0) {
-        buf.write(ai);
-      } else if (fi >= 0) {
-        buf.write(fi);
-      } else {
-        buf.write(ch);
-      }
-    }
-    final matches =
-        RegExp(r'\d+(?:\.\d+)?').allMatches(buf.toString()).toList();
-    if (matches.length != 1) return null;
-    final v = double.tryParse(matches.first.group(0)!);
-    return (v == null || v <= 0) ? null : v;
+    // الكمية («٢٠ كيلو») والساعة والتاريخ مش مبلغ — نستبعدها قبل الاختيار.
+    final v = LocalCommandParser.extractSlots(text,
+        expect: const {'amount'})['amount'];
+    return v is num && v > 0 ? v.toDouble() : null;
   }
 
   /// هل الرقم المالي ناقص فعلًا في نتيجة التحليل؟
@@ -667,24 +749,25 @@ class AssistantController {
     } else {
       s = resolved.value!;
     }
+    final due = _dueFrom(d);
+    if (due == null) return '❓ محتاج اليوم والساعة بالظبط عشان أسجّل التوريد المتوقع.';
     final del = Delivery(
       id: const Uuid().v4(),
       item: d['delivery_item'] ?? s.itemType,
       quantity: (d['delivery_quantity'] as num?)?.toDouble(),
       unit: d['delivery_unit'] ?? '',
-      expectedDate: DateTime.tryParse(d['due_date'] ?? '') ??
-          DateTime.now().add(const Duration(days: 1)),
+      expectedDate: due,
     );
     s.deliveries.add(del);
     await StorageService.saveSupplier(s);
-    final rem =
-        DateTime.tryParse((d['remind_at'] ?? '').replaceFirst(' ', 'T')) ??
-            del.expectedDate.subtract(const Duration(hours: 2));
+    // التنبيه في وقت التوريد المتوقع نفسه — لنسأل «اتسلّم؟»؛ مش بنسجّل مشتريات.
+    final rem = due;
     final c = Commitment(
       id: const Uuid().v4(),
       textOriginal: d['text_original'] ?? '',
       person: s.name,
       type: 'supplier',
+      amount: (d['amount'] as num?)?.toDouble(),
       dueDate: del.expectedDate,
       remindAt: rem,
     );
@@ -784,11 +867,9 @@ class AssistantController {
 
   static Future<String> _createCommitment(
       Map<String, dynamic> d, String text) async {
-    final due = DateTime.tryParse(d['due_date'] ?? '') ??
-        DateTime.now().add(const Duration(days: 1));
-    final rem =
-        DateTime.tryParse((d['remind_at'] ?? '').replaceFirst(' ', 'T')) ??
-            due.subtract(const Duration(hours: 1));
+    final due = _dueFrom(d);
+    if (due == null) return '❓ محتاج اليوم والساعة بالظبط عشان أضبط التذكير.';
+    final rem = due;
     final c = Commitment(
       id: const Uuid().v4(),
       textOriginal: d['text_original'] ?? text,
@@ -801,7 +882,7 @@ class AssistantController {
     );
     await StorageService.saveCommitment(c);
     final outcome = await ReminderService.createAndSchedule(
-      title: 'تذكير: ${c.person}',
+      title: c.person == 'عام' ? 'تذكير' : 'تذكير: ${c.person}',
       body: c.textOriginal,
       dueAt: c.remindAt,
       relatedEntityId: c.id,

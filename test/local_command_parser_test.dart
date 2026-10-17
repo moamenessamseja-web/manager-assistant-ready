@@ -168,4 +168,98 @@ void main() {
       expect(r.intent, 'other');
     });
   });
+
+  group('Phase B — كمية ≠ مبلغ، يوم/ساعة صريحين، واو العطف الملتصقة', () {
+    final now = DateTime.now();
+    final tomorrow = DateTime(now.year, now.month, now.day + 1);
+    String ymd(DateTime d) =>
+        '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+    test('«٢٠ كيلو سكر» كمية، مش مبلغ — ويسأل عن القيمة', () {
+      final r = LocalCommandParser.parse('المورد عجمي جاب الآن ٢٠ كيلو سكر');
+      expect(r.intent, 'record_purchase');
+      expect(r.confident, isFalse);
+      expect(r.fields['amount'], isNull);
+      expect(r.fields['purchase_quantity'], 20);
+      expect(r.fields['purchase_unit'], 'كيلو');
+      expect(r.fields['purchase_item'], 'سكر');
+      expect(r.clarification, contains('قيمة'));
+    });
+
+    test('«جمال هيجيب بكرة ٥ كراتين لبن إجمالي ١٠٠٠ جنيه» → توريد متوقع، ويسأل عن الساعة',
+        () {
+      final r = LocalCommandParser.parse(
+          'جمال هيجيب بكرة ٥ كراتين لبن إجمالي ١٠٠٠ جنيه');
+      expect(r.intent, 'supplier_delivery');
+      expect(r.fields['person'], 'جمال');
+      expect(r.fields['due_date'], ymd(tomorrow));
+      expect(r.fields['delivery_quantity'], 5);
+      expect(r.fields['delivery_unit'], 'كراتين');
+      expect(r.fields['delivery_item'], 'لبن');
+      expect(r.fields['amount'], 1000);
+      expect(r.fields['time'], isNull); // مفيش ساعة من عندنا
+      expect(r.confident, isFalse);
+    });
+
+    test('توريد متوقع بيوم وساعة صريحين = واضح', () {
+      final r = LocalCommandParser.parse(
+          'جمال هيجيب بكرة الساعة ٥ العصر ٥ كراتين لبن إجمالي ١٠٠٠ جنيه');
+      expect(r.intent, 'supplier_delivery');
+      expect(r.fields['time'], '17:00');
+      expect(r.fields['due_date'], ymd(tomorrow));
+      expect(r.fields['amount'], 1000);
+      expect(r.confident, isTrue);
+    });
+
+    test('تذكير بتاريخ وساعة صريحين', () {
+      final r = LocalCommandParser.parse(
+          'افتكر ادفع الايجار يوم ٢٠ اكتوبر الساعة ٩ صباحا');
+      expect(r.intent, 'create_commitment');
+      expect(r.fields['person'], 'عام');
+      expect((r.fields['due_date'] as String).endsWith('-10-20'), isTrue);
+      expect(r.fields['time'], '09:00');
+      expect(r.fields['amount'], isNull); // ٢٠ و٩ مش مبالغ
+      expect(r.confident, isTrue);
+    });
+
+    test('تذكير بدون ساعة أو بساعة ملتبسة → مش واضح (يسأل، ما يخمّنش)', () {
+      final noTime = LocalCommandParser.parse('فكرني بكرة اتصل بالعميل');
+      expect(noTime.intent, 'create_commitment');
+      expect(noTime.fields['time'], isNull);
+      expect(noTime.confident, isFalse);
+      final ambiguous =
+          LocalCommandParser.parse('فكرني بكرة الساعة ٥ اتصل بالعميل');
+      expect(ambiguous.fields['time'], isNull);
+      expect(ambiguous.fields['time_hour_raw'], 5);
+      expect(ambiguous.confident, isFalse);
+      final noDay = LocalCommandParser.parse('فكرني الساعة ٥ العصر اتصل بالعميل');
+      expect(noDay.fields['due_date'], isNull);
+      expect(noDay.confident, isFalse);
+    });
+
+    test('واو العطف الملتصقة: «محمود وخالد» شخصين، مش واحد', () {
+      final r = LocalCommandParser.parse('حضر محمود وخالد');
+      expect(r.intent, 'mark_attendance');
+      expect(r.fields['people'], ['محمود', 'خالد']);
+    });
+
+    test('اسم بيبدأ بواو لا تتفصل منه الواو', () {
+      final r = LocalCommandParser.parse('حضر وليد');
+      expect(r.fields['person'], 'وليد');
+    });
+
+    test('استخراج الخانات من ردود قصيرة', () {
+      expect(
+          LocalCommandParser.extractSlots('٣٠٠', expect: {'amount'})['amount'],
+          300);
+      final when = LocalCommandParser.extractSlots('بكرة الساعة ٥ العصر');
+      expect(when['due_date'], ymd(tomorrow));
+      expect(when['time'], '17:00');
+      expect(
+          LocalCommandParser.extractSlots('مساء', hourHint: 5)['time'], '17:00');
+      expect(
+          LocalCommandParser.extractSlots('٥', expect: {'time'})['time_hour_raw'],
+          5);
+    });
+  });
 }

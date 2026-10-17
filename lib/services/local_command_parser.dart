@@ -104,6 +104,21 @@ class LocalCommandParser {
     if (qu != null) {
       usedIndices.addAll(qu.indices);
     }
+    // التاريخ والساعة (للتوريد المتوقع والتذكيرات فقط نحسب الساعة). الأرقام
+    // اللي اتستهلكت كتاريخ/ساعة ما تتحسبش مبلغ ولا اسم أبدًا.
+    final wantTime = intent == 'supplier_delivery' ||
+        intent == 'create_commitment' ||
+        intent == 'add_rule';
+    final dt = _dateTimeOf(n, w, numbers, wantTime: wantTime);
+    usedIndices.addAll(dt.used);
+    // اسم الصنف (الكلمة بعد «كمية + وحدة») — ما يتحوّلش لشخص.
+    final itemIdx = (qu != null &&
+            (intent == 'record_purchase' ||
+                intent == 'supplier_delivery' ||
+                intent == 'mark_delivery_received'))
+        ? _itemIndex(w, qu)
+        : null;
+    if (itemIdx != null) usedIndices.add(itemIdx);
 
     // المبلغ: من الأرقام أو من كلمات الأعداد.
     // مهم: الرقم اللي اتستخدم بالفعل ككمية (زي الـ«20» في «20 كيلو») لازم
@@ -113,9 +128,9 @@ class LocalCommandParser {
     final qtyIndex = qu == null
         ? null
         : qu.indices.reduce((a, b) => a < b ? a : b); // فهرس رقم الكمية نفسه
-    final numbersForAmount = qtyIndex == null
-        ? numbers
-        : numbers.where((x) => x.start != qtyIndex).toList();
+    final numbersForAmount = numbers
+        .where((x) => x.start != qtyIndex && !dt.used.contains(x.start))
+        .toList();
     final amount = _pickAmount(n, w, numbersForAmount);
     if (amount != null) f['amount'] = amount;
 
@@ -129,6 +144,9 @@ class LocalCommandParser {
     // الوظيفة (لتمييز «أحمد سواق» عن «أحمد طباخ»)
     final role = _roleIn(w);
     if (role != null) f['person_role'] = role;
+    if (dt.date != null) f['due_date'] = dt.date;
+    if (dt.time != null) f['time'] = dt.time;
+    if (dt.hourRaw != null) f['time_hour_raw'] = dt.hourRaw;
 
     switch (intent) {
       case 'mark_attendance':
@@ -150,12 +168,18 @@ class LocalCommandParser {
       case 'supplier_delivery':
       case 'mark_delivery_received':
         if (names.isNotEmpty) f['person'] = names.first;
+        if (intent != 'add_supplier' && qu != null) {
+          f['delivery_quantity'] = qu.quantity;
+          if (qu.unit.isNotEmpty) f['delivery_unit'] = qu.unit;
+          if (itemIdx != null) f['delivery_item'] = w[itemIdx];
+        }
         break;
 
       case 'record_purchase':
         if (qu != null) {
           f['purchase_quantity'] = qu.quantity;
           if (qu.unit.isNotEmpty) f['purchase_unit'] = qu.unit;
+          if (itemIdx != null) f['purchase_item'] = w[itemIdx];
         }
         // الإجمالي = المبلغ المذكور صراحةً
         f['purchase_total'] = amount;
@@ -166,9 +190,13 @@ class LocalCommandParser {
         break;
 
       case 'create_commitment':
-        f['person'] = names.isNotEmpty ? names.first : 'عام';
-        final due = _relativeDate(n);
-        if (due != null) f['due_date'] = due;
+        // «فكرني/افتكر/مهمة» = تذكير عام؛ أول كلمة متبقية فيه فعل/مفعول
+        // («أدفع الإيجار») مش اسم شخص. الاسم بس في الالتزامات/الديون.
+        final isReminder = w.contains('فكرني') ||
+            w.contains('ذكرني') ||
+            w.contains('افتكر') ||
+            w.contains('مهمه');
+        f['person'] = (!isReminder && names.isNotEmpty) ? names.first : 'عام';
         break;
 
       case 'add_rule':
@@ -183,7 +211,7 @@ class LocalCommandParser {
       intent: intent,
       fields: f,
       confident: confident,
-      clarification: confident ? null : _clarify(intent),
+      clarification: confident ? null : _clarify(intent, f),
     );
   }
 
@@ -241,7 +269,15 @@ class LocalCommandParser {
       return 'mark_delivery_received';
     }
     // توريد متوقع
-    if (c('متوقع') || c('هيجي') || c('هتجي') || c('هيوصل') || c('هتوصل')) {
+    if (c('متوقع') ||
+        c('هيجي') ||
+        c('هتجي') ||
+        c('هيوصل') ||
+        c('هتوصل') ||
+        c('هيسلم') ||
+        c('هتسلم') ||
+        c('هيورد') ||
+        c('هتورد')) {
       return 'supplier_delivery';
     }
     // قاعدة متابعة
@@ -291,7 +327,8 @@ class LocalCommandParser {
         t('دين') ||
         t('مهمه') ||
         t('فكرني') ||
-        t('ذكرني')) {
+        t('ذكرني') ||
+        t('افتكر')) {
       return 'create_commitment';
     }
     return 'other';
@@ -402,10 +439,27 @@ class LocalCommandParser {
       used.add(num.end);
     }
     final candidates = <int, String>{};
+    final attached = <int>{}; // مرشحين اتفصلت منهم «و» العطف الملتصقة
     for (var i = 0; i < w.length; i++) {
       if (used.contains(i)) continue;
       var tok = w[i];
       if (tok.length < 2) continue;
+      // «محمود وخالد»: الواو ملتصقة بالاسم التاني — بنفصلها لو اللي قبله اسم
+      // مرشح متجاور، إلا لو الكلمة اسم معروف يبدأ بواو (وليد/وائل...).
+      if (tok.length >= 4 &&
+          tok.startsWith('و') &&
+          candidates.containsKey(i - 1) &&
+          !_waNames.contains(tok)) {
+        final rest = tok.substring(1);
+        if (!_isStopToken(rest) &&
+            !_units.contains(rest) &&
+            !_roles.contains(rest) &&
+            RegExp(r'^[\u0621-\u064A]{3,}$').hasMatch(rest)) {
+          candidates[i] = rest;
+          attached.add(i);
+          continue;
+        }
+      }
       if (_isStopToken(tok)) continue;
       // بادئة شائعة ملتصقة: «لسالم» → «سالم»، «بأحمد» → «أحمد».
       tok = _stripClitic(tok);
@@ -424,7 +478,8 @@ class LocalCommandParser {
     final out = <String>[candidates[indices.first]!];
     var last = indices.first;
     for (final i in indices.skip(1)) {
-      if (i == last + 2 && w[last + 1] == 'و') {
+      if ((i == last + 2 && w[last + 1] == 'و') ||
+          (i == last + 1 && attached.contains(i))) {
         out.add(candidates[i]!);
         last = i;
       } else {
@@ -441,7 +496,7 @@ class LocalCommandParser {
   /// «الموظف»، إلخ. مُطبَّق فقط لو الباقي بعد شطب «ال» كلمة وظيفية معروفة
   /// بالفعل، عشان ما نتلفش أسماء أشخاص حقيقية بتبدأ بـ«ال» زي «الحسيني».
   static bool _isStopToken(String tok) {
-    if (_stop.contains(tok)) return true;
+    if (_stop.contains(tok) || _dateWords.contains(tok)) return true;
     if (tok.length > 4 && tok.startsWith('ال')) {
       final rest = tok.substring(2);
       if (_stop.contains(rest)) return true;
@@ -481,6 +536,272 @@ class LocalCommandParser {
       return null;
     }
     return d.toIso8601String().substring(0, 10);
+  }
+
+  // ───────────────────── التاريخ والساعة (بدون أي افتراض) ─────────────────────
+
+  static const Map<String, int> _months = {
+    'يناير': 1,
+    'فبراير': 2,
+    'مارس': 3,
+    'ابريل': 4,
+    'مايو': 5,
+    'يونيو': 6,
+    'يوليو': 7,
+    'اغسطس': 8,
+    'سبتمبر': 9,
+    'اكتوبر': 10,
+    'نوفمبر': 11,
+    'ديسمبر': 12,
+  };
+
+  /// أيام الأسبوع بصيغة DateTime.weekday (الاثنين=1 ... الأحد=7).
+  static const Map<String, int> _weekdays = {
+    'الاتنين': 1,
+    'الاثنين': 1,
+    'التلات': 2,
+    'الثلاثاء': 2,
+    'الاربع': 3,
+    'الاربعاء': 3,
+    'الخميس': 4,
+    'الجمعه': 5,
+    'السبت': 6,
+    'الاحد': 7,
+  };
+
+  static const Set<String> _amWords = {'صباحا', 'صباح', 'الصبح', 'الفجر'};
+  static const Set<String> _pmWords = {'مساء', 'المساء', 'العصر', 'المغرب', 'عشاء'};
+  static const Set<String> _nightWords = {'بالليل', 'الليل', 'ليلا'};
+  static const Set<String> _noonWords = {'الظهر', 'ظهرا', 'الضهر'};
+
+  /// أسماء حقيقية بتبدأ بواو — ما تتفصلش منها الواو كأنها عطف.
+  static const Set<String> _waNames = {
+    'وليد', 'وائل', 'وسيم', 'وحيد', 'وجدي', 'وفاء', 'وردة', 'ورده', 'وسام',
+    'وديع', 'وجيه', 'وهبه', 'وهبي',
+  };
+
+  /// كلمات التاريخ/الساعة/التوريد المتوقع — مش أسماء أشخاص.
+  static final Set<String> _dateWords = {
+    'الساعه', 'ساعه', 'صباحا', 'صباح', 'الصبح', 'مساء', 'المساء', 'العصر',
+    'المغرب', 'الظهر', 'ظهرا', 'بالليل', 'الليل', 'ليلا', 'الفجر', 'عشاء',
+    'يوم', 'ايام', 'يومين', 'بعد', 'ونص', 'ونصف', 'وربع', 'وثلث', 'الليله',
+    'هيجيب', 'هتجيب', 'هيسلم', 'هتسلم', 'هيورد', 'هتورد', 'هيجيبو', 'افتكر',
+    ..._weekdays.keys,
+    ..._months.keys,
+  };
+
+  static bool _isInt(double v) => v == v.roundToDouble();
+
+  /// فهرس كلمة الصنف: أول كلمة عربية بعد «كمية + وحدة» ولا تكون «من/ل/رقم».
+  static int? _itemIndex(List<String> w, _QuantityUnit qu) {
+    final idx = qu.indices.reduce((a, b) => a > b ? a : b) + 1;
+    if (idx >= w.length) return null;
+    final tok = w[idx];
+    if (tok.length < 2 ||
+        _isStopToken(tok) ||
+        _units.contains(tok) ||
+        _roles.contains(tok) ||
+        _numWords.containsKey(tok) ||
+        !RegExp(r'^[\u0621-\u064A]{2,}$').hasMatch(tok)) {
+      return null;
+    }
+    return idx;
+  }
+
+  /// يستخرج اليوم والساعة بدون أي افتراض. لو الساعة من غير تحديد صباح/مساء
+  /// بنرجّع [hourRaw] ونسأل، بدل ما نخمّن.
+  static _DT _dateTimeOf(String n, List<String> w, List<_Num> nums,
+      {bool wantTime = true, int? hourHint}) {
+    final r = _DT();
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    DateTime addDays(int k) => DateTime(today.year, today.month, today.day + k);
+    String ymd(DateTime d) =>
+        '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+    DateTime? day;
+    if (n.contains('بعد بكره')) {
+      day = addDays(2);
+    } else if (w.contains('بكره') || w.contains('غدا')) {
+      day = addDays(1);
+    } else if (w.contains('النهارده') ||
+        w.contains('اليوم') ||
+        w.contains('الليله')) {
+      day = today;
+    }
+    if (day == null) {
+      for (final x in nums) {
+        final before = x.start > 0 ? w[x.start - 1] : '';
+        final after = x.end + 1 < w.length ? w[x.end + 1] : '';
+        if (before == 'بعد' &&
+            (after == 'يوم' || after == 'ايام') &&
+            _isInt(x.value) &&
+            x.value > 0 &&
+            x.value <= 365) {
+          day = addDays(x.value.toInt());
+          r.used.addAll([x.start, x.end]);
+          break;
+        }
+      }
+    }
+    if (day == null && n.contains('بعد يومين')) day = addDays(2);
+    if (day == null && n.contains('بعد اسبوع')) day = addDays(7);
+    if (day == null) {
+      for (final x in nums) {
+        final after = x.end + 1 < w.length ? w[x.end + 1] : '';
+        final m = _months[after];
+        if (m != null && _isInt(x.value) && x.value >= 1 && x.value <= 31) {
+          var cand = DateTime(today.year, m, x.value.toInt());
+          if (cand.isBefore(today)) cand = DateTime(today.year + 1, m, x.value.toInt());
+          day = cand;
+          r.used.addAll([x.start, x.end]);
+          break;
+        }
+      }
+    }
+    if (day == null) {
+      for (var i = 0; i < w.length; i++) {
+        final m = RegExp(r'^(\d{1,2})/(\d{1,2})$').firstMatch(w[i]);
+        if (m == null) continue;
+        final dd = int.parse(m.group(1)!);
+        final mm = int.parse(m.group(2)!);
+        if (mm < 1 || mm > 12 || dd < 1 || dd > 31) continue;
+        var cand = DateTime(today.year, mm, dd);
+        if (cand.isBefore(today)) cand = DateTime(today.year + 1, mm, dd);
+        day = cand;
+        r.used.add(i);
+        break;
+      }
+    }
+    if (day == null) {
+      for (final t in w) {
+        final wd = _weekdays[t];
+        if (wd == null) continue;
+        var diff = (wd - today.weekday + 7) % 7;
+        if (diff == 0) diff = 7;
+        day = addDays(diff);
+        break;
+      }
+    }
+    if (day != null) r.date = ymd(day);
+
+    if (!wantTime) return r;
+
+    String? pcat;
+    for (final t in w) {
+      if (_amWords.contains(t)) {
+        pcat = 'am';
+      } else if (_pmWords.contains(t)) {
+        pcat = 'pm';
+      } else if (_nightWords.contains(t)) {
+        pcat = 'night';
+      } else if (_noonWords.contains(t)) {
+        pcat = 'noon';
+      }
+      if (pcat != null) break;
+    }
+    bool isPeriod(String t) =>
+        _amWords.contains(t) ||
+        _pmWords.contains(t) ||
+        _nightWords.contains(t) ||
+        _noonWords.contains(t);
+
+    int? hour;
+    var minute = 0;
+    for (var i = 0; i < w.length; i++) {
+      if (w[i] != 'الساعه' && w[i] != 'ساعه') continue;
+      final x = nums.where((e) => e.start == i + 1).toList();
+      if (x.isNotEmpty && _isInt(x.first.value)) {
+        hour = x.first.value.toInt();
+        r.used.addAll([x.first.start, x.first.end]);
+        final ni = x.first.end + 1;
+        if (ni < w.length) {
+          if (w[ni] == 'ونص' || w[ni] == 'ونصف') {
+            minute = 30;
+          } else if (w[ni] == 'وربع') {
+            minute = 15;
+          } else if (w[ni] == 'وثلث') {
+            minute = 20;
+          }
+        }
+      }
+      break;
+    }
+    if (hour == null) {
+      for (final x in nums) {
+        final after = x.end + 1 < w.length ? w[x.end + 1] : '';
+        if (isPeriod(after) && _isInt(x.value) && x.value >= 0 && x.value <= 24) {
+          hour = x.value.toInt();
+          r.used.addAll([x.start, x.end]);
+          break;
+        }
+      }
+    }
+    if (hour == null && pcat != null && hourHint != null) hour = hourHint;
+    if (hour == null || hour > 24) return r;
+
+    var h = hour;
+    if (h == 24) h = 0;
+    if (h == 0 || h >= 13) {
+      // 24 ساعة صريحة — مفيش لبس.
+    } else if (pcat == null) {
+      r.hourRaw = h; // 1..12 من غير صباح/مساء → نسأل.
+      return r;
+    } else if (pcat == 'am') {
+      if (h == 12) h = 0;
+    } else if (pcat == 'pm') {
+      if (h != 12) h += 12;
+    } else if (pcat == 'noon') {
+      if (h >= 1 && h <= 5) h += 12;
+    } else if (pcat == 'night') {
+      if (h == 12) {
+        h = 0;
+      } else if (h >= 6) {
+        h += 12;
+      }
+    }
+    r.time =
+        '${h.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
+    return r;
+  }
+
+  /// يستخرج حقول ناقصة من رد قصير على سؤال استيضاح («٣٠٠» / «بكرة الساعة ٥
+  /// العصر» / «مساء»)، بدل ما نعتمد إن الرد نفسه يكون أمر كامل.
+  /// [expect] = الحقول الناقصة في العملية المعلّقة.
+  static Map<String, dynamic> extractSlots(String raw,
+      {Set<String> expect = const {}, int? hourHint}) {
+    final n = normalize(raw);
+    final w = n.split(' ').where((e) => e.isNotEmpty).toList();
+    final nums = _numbersIn(w);
+    final qu = _quantityUnit(w);
+    final dt = _dateTimeOf(n, w, nums, wantTime: true, hourHint: hourHint);
+    final f = <String, dynamic>{};
+    if (dt.date != null) f['due_date'] = dt.date;
+    if (dt.time != null) f['time'] = dt.time;
+    if (dt.hourRaw != null) f['time_hour_raw'] = dt.hourRaw;
+    final used = <int>{...dt.used, if (qu != null) ...qu.indices};
+    final rest = nums.where((x) => !used.contains(x.start)).toList();
+    if (expect.contains('time') &&
+        dt.time == null &&
+        dt.hourRaw == null &&
+        rest.length == 1 &&
+        _isInt(rest.first.value) &&
+        rest.first.value >= 1 &&
+        rest.first.value <= 12) {
+      f['time_hour_raw'] = rest.first.value.toInt();
+    }
+    if (expect.contains('amount') && rest.isNotEmpty) {
+      final a = _pickAmount(n, w, rest);
+      if (a != null) f['amount'] = a;
+    }
+    if (expect.contains('person') || expect.contains('employee_name')) {
+      final names = _names(w, nums, used);
+      if (names.isNotEmpty) {
+        f['person'] = names.first;
+        if (names.length > 1) f['people'] = names;
+      }
+    }
+    return f;
   }
 
   static String _ruleFrequency(String n) {
@@ -524,8 +845,9 @@ class LocalCommandParser {
     final hasName = (f['person'] as String?)?.isNotEmpty == true;
     switch (intent) {
       case 'mark_attendance':
-      case 'add_supplier':
       case 'supplier_delivery':
+        return hasName && f['due_date'] != null && f['time'] != null;
+      case 'add_supplier':
       case 'mark_delivery_received':
         return hasName;
       case 'add_advance':
@@ -538,7 +860,8 @@ class LocalCommandParser {
       case 'add_employee':
         return hasName;
       case 'create_commitment':
-        return true;
+        // لازم يوم + ساعة صريحين — مفيش افتراض «بكرة» ولا ساعة من عندنا.
+        return f['due_date'] != null && f['time'] != null;
       case 'add_rule':
         return true;
       default:
@@ -546,7 +869,7 @@ class LocalCommandParser {
     }
   }
 
-  static String? _clarify(String intent) {
+  static String? _clarify(String intent, Map<String, dynamic> f) {
     switch (intent) {
       case 'mark_attendance':
         return '❓ محتاج اسم الموظف.';
@@ -557,9 +880,17 @@ class LocalCommandParser {
       case 'add_supplier_payment':
         return '❓ محتاج اسم المورد والمبلغ المدفوع.';
       case 'record_purchase':
-        return '❓ محتاج اسم المورد وقيمة التوريد (أو الكمية وسعر الوحدة).';
-      case 'add_supplier':
+        final who = (f['person'] as String?) ?? '';
+        if (who.isEmpty) return '❓ محتاج اسم المورد وقيمة التوريد.';
+        final q = f['purchase_quantity'] == null
+            ? ''
+            : ' (${f['purchase_quantity']} ${f['purchase_unit'] ?? ''} ${f['purchase_item'] ?? ''})'
+                .replaceAll(RegExp(r'\s+'), ' ');
+        return '❓ كام إجمالي قيمة التوريد من $who$q؟ (أو سعر الوحدة)';
       case 'supplier_delivery':
+      case 'create_commitment':
+        return null; // المتحكّم بيسأل عن الناقص بالظبط (اسم/يوم/ساعة).
+      case 'add_supplier':
       case 'mark_delivery_received':
         return '❓ محتاج اسم المورد.';
       default:
@@ -633,6 +964,15 @@ class LocalCommandParser {
   };
 
   static const Set<String> _units = {
+    'كراتين',
+    'شكاير',
+    'كيس',
+    'اكياس',
+    'باكيت',
+    'علب',
+    'قطعه',
+    'قطع',
+    'لترات',
     'كيلو',
     'كيلوجرام',
     'كجم',
@@ -851,6 +1191,13 @@ class LocalCommandParser {
 }
 
 /// رقم مع موضعه في قائمة الكلمات.
+class _DT {
+  String? date; // YYYY-MM-DD
+  String? time; // HH:mm (24h)
+  int? hourRaw; // ساعة 1..12 من غير صباح/مساء
+  final Set<int> used = <int>{};
+}
+
 class _Num {
   final double value;
   final int start;
