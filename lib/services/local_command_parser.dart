@@ -828,9 +828,9 @@ class LocalCommandParser {
   static bool _isConfident(String intent, Map<String, dynamic> f) {
     final hasName = (f['person'] as String?)?.isNotEmpty == true;
     switch (intent) {
-      case 'mark_attendance':
       case 'supplier_delivery':
         return hasName && f['due_date'] != null && f['time'] != null;
+      case 'mark_attendance':
       case 'add_supplier':
       case 'mark_delivery_received':
         return hasName;
