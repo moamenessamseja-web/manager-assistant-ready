@@ -8,6 +8,7 @@ import 'services/rules_service.dart';
 import 'services/reminder_service.dart';
 import 'services/app_state.dart';
 import 'services/settings_service.dart';
+import 'services/notification_prefs.dart';
 import 'services/app_error_service.dart';
 import 'services/chat_history_service.dart';
 import 'screens/main_shell.dart';
@@ -23,6 +24,7 @@ Future<void> main() async {
     await AppErrorService.init();
     await ChatHistoryService.init();
     await SettingsService.init();
+    await NotificationPrefs.init();
     tz.initializeTimeZones();
   } catch (e) {
     final msg = e.toString();

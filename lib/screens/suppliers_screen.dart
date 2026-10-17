@@ -50,11 +50,7 @@ class _S extends State<SuppliersScreen> {
     final totalGoods = active.fold<double>(0, (s, x) => s + x.goodsTotal);
     final totalPaid = active.fold<double>(0, (s, x) => s + x.totalPaid);
 
-    final filtered = switch (_filter) {
-      'archived' => all.where((s) => s.archived).toList(),
-      'all' => all,
-      _ => all,
-    };
+    final filtered = filterSuppliers(all, _filter);
 
     final query = _search.text.trim().toLowerCase();
     final suppliers = query.isEmpty

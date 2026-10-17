@@ -7,6 +7,7 @@ import '../design/widgets.dart';
 import '../design/format.dart';
 import 'staff_screen.dart';
 import 'suppliers_screen.dart';
+import 'memory_lists.dart';
 
 /// الذاكرة — مركز معلومات العمل الحي.
 /// لما مفيش بحث: ملخص تشغيلي + خط زمني للنشاط الأخير.
@@ -137,7 +138,7 @@ class _MemoryScreenState extends State<MemoryScreen> {
                 value: '${pendingCommitments.length}',
                 sub: 'قائمة',
                 color: AppColors.warning,
-                onTap: null,
+                onTap: () => _navigateTo(context, const CommitmentsListScreen()),
               ),
             ),
             const SizedBox(width: AppSpace.x2),
@@ -152,7 +153,7 @@ class _MemoryScreenState extends State<MemoryScreen> {
                 color: overdueReminders.isNotEmpty
                     ? AppColors.danger
                     : AppColors.success,
-                onTap: null,
+                onTap: () => _navigateTo(context, const RemindersListScreen()),
               ),
             ),
           ],

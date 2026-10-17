@@ -3,6 +3,7 @@ import '../models/rule.dart';
 import '../services/storage_service.dart';
 import '../design/widgets.dart';
 import '../design/format.dart';
+import 'notification_settings_screen.dart';
 
 class RulesScreen extends StatefulWidget {
   const RulesScreen({super.key});
@@ -17,7 +18,20 @@ class _RulesScreenState extends State<RulesScreen> {
   Widget build(BuildContext context) {
     final rules = StorageService.rules();
     return Scaffold(
-      appBar: AppBar(title: const Text('القواعد والتنبيهات')),
+      appBar: AppBar(
+        title: const Text('القواعد والتنبيهات'),
+        actions: [
+          IconButton(
+            tooltip: 'إعدادات الإشعارات',
+            icon: const Icon(Icons.tune),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                  builder: (_) => const NotificationSettingsScreen()),
+            ),
+          ),
+        ],
+      ),
       body: rules.isEmpty
           ? const AppEmptyState(
               icon: Icons.notifications_none,

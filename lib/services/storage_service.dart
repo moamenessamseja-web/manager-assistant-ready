@@ -200,10 +200,14 @@ class StorageService {
         AppState.instance.notify();
       });
 
-  static List<Supplier> suppliersMatching(String name) {
+  /// المؤرشفون **مستبعدون** افتراضيًا: عملية جديدة (دفعة/توريد) ما تتسجلش
+  /// على مورد مؤرشف إلا لو [includeArchived] اتطلب صراحةً.
+  static List<Supplier> suppliersMatching(String name,
+      {bool includeArchived = false}) {
     if (name.trim().isEmpty) return [];
     final normalized = normalizeArabic(name);
     return suppliers().where((s) {
+      if (s.archived && !includeArchived) return false;
       final sNorm = normalizeArabic(s.name);
       return sNorm.contains(normalized) || normalized.contains(sNorm);
     }).toList();

@@ -581,7 +581,15 @@ class AssistantController {
     if (name.trim().isEmpty)
       return const _Resolved(null, '❓ محتاج اسم المورد.');
     final matches = StorageService.suppliersMatching(name);
-    if (matches.isEmpty) return _Resolved(null, '❓ لم أجد مورد باسم $name.');
+    if (matches.isEmpty) {
+      final arch =
+          StorageService.suppliersMatching(name, includeArchived: true);
+      if (arch.isNotEmpty) {
+        return _Resolved(null,
+            '🗄️ المورد ${arch.first.name} مؤرشف. ألغِ أرشفته الأول لو عايز تسجّل عليه عملية جديدة.');
+      }
+      return _Resolved(null, '❓ لم أجد مورد باسم $name.');
+    }
     if (matches.length > 1) {
       final opts = matches.map((s) => '${s.name} (${s.itemType})').join(' / ');
       return _Resolved(
@@ -715,6 +723,12 @@ class AssistantController {
     if (!resolved.ok) {
       final matches = StorageService.suppliersMatching(name);
       if (matches.length > 1) return resolved.message!;
+      // اسم لمورد مؤرشف: ما ننشئش مورد مكرر بنفس الاسم.
+      if (matches.isEmpty &&
+          StorageService.suppliersMatching(name, includeArchived: true)
+              .isNotEmpty) {
+        return resolved.message!;
+      }
       s = Supplier(
           id: const Uuid().v4(),
           name: name,
@@ -742,6 +756,12 @@ class AssistantController {
       // لكن لو فيه التباس (أكتر من واحد) نوقف ونطلب توضيح.
       final matches = StorageService.suppliersMatching(name);
       if (matches.length > 1) return resolved.message!;
+      // اسم لمورد مؤرشف: ما ننشئش مورد مكرر بنفس الاسم.
+      if (matches.isEmpty &&
+          StorageService.suppliersMatching(name, includeArchived: true)
+              .isNotEmpty) {
+        return resolved.message!;
+      }
       s = Supplier(
           id: const Uuid().v4(),
           name: name.isEmpty ? 'مورد' : name,
@@ -773,6 +793,7 @@ class AssistantController {
     );
     await StorageService.saveCommitment(c);
     final outcome = await ReminderService.createAndSchedule(
+      category: 'suppliers',
       title: 'توريد متوقع: ${s.name}',
       body: c.textOriginal.isEmpty
           ? 'توريد ${del.item} من ${s.name}'

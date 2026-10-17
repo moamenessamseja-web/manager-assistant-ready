@@ -2,6 +2,7 @@ import 'package:uuid/uuid.dart';
 import '../models/reminder.dart';
 import 'storage_service.dart';
 import 'notification_service.dart';
+import 'notification_prefs.dart';
 
 /// نتيجة إنشاء تذكير من البداية للنهاية — تُستخدم لصياغة رسالة صادقة للمستخدم
 /// بدل افتراض أن تسجيل الالتزام في قاعدة البيانات يعني وصول التنبيه فعليًا.
@@ -16,6 +17,8 @@ class ReminderOutcome {
     switch (status) {
       case 'permission_required':
         return '\n⚠️ سجلت البيانات، لكن صلاحية الإشعارات مش مفعّلة — فعّلها من الإعدادات عشان يوصلك التنبيه.';
+      case 'muted_by_settings':
+        return '\nℹ️ سجلت البيانات، لكن تنبيهات النوع ده متوقفة من إعدادات الإشعارات فمش هيوصلك إشعار.';
       case 'schedule_failed':
         return '\n⚠️ تم تسجيل العملية بنجاح، لكن تعذر ضبط التذكير. تقدر تتابع إعدادات التنبيهات.';
       default:
@@ -35,7 +38,9 @@ class ReminderService {
     String recurrence = 'none',
     String? relatedEntityId,
     String? relatedEntityType,
+    String? category, // reminders | suppliers | rules
   }) async {
+    final cat = category ?? (relatedEntityType == 'rule' ? 'rules' : 'reminders');
     final r = Reminder(
       id: const Uuid().v4(),
       title: title,
@@ -45,10 +50,17 @@ class ReminderService {
       relatedEntityId: relatedEntityId,
       relatedEntityType: relatedEntityType,
     );
+    // القسم متوقف من إعدادات الإشعارات: نحفظ السجل بدون جدولة أي إشعار.
+    if (!NotificationPrefs.allows(cat)) {
+      r.status = 'cancelled';
+      r.enabled = false;
+      await StorageService.saveReminder(r);
+      return ReminderOutcome(false, 'muted_by_settings', r);
+    }
     await StorageService.saveReminder(r);
 
-    final res =
-        await NotificationService.scheduleAt(r.id.hashCode, title, body, dueAt);
+    final res = await NotificationService.scheduleAt(
+        r.id.hashCode, title, body, NotificationPrefs.effectiveTime(dueAt));
     r.status = res.status;
     r.updatedAt = DateTime.now();
     await StorageService.saveReminder(r);
@@ -93,7 +105,7 @@ class ReminderService {
       if (!r.enabled || r.status != 'scheduled') continue;
       if (r.dueAt.isBefore(now)) continue;
       final res = await NotificationService.scheduleAt(
-          r.id.hashCode, r.title, r.body, r.dueAt);
+          r.id.hashCode, r.title, r.body, NotificationPrefs.effectiveTime(r.dueAt));
       if (res.status != r.status) {
         r.status = res.status;
         r.updatedAt = DateTime.now();

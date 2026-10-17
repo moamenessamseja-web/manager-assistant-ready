@@ -293,3 +293,18 @@ class Supplier {
         createdAt: j['createdAt'] == null ? null : DateTime.parse(j['createdAt']),
       );
 }
+
+/// فلتر قائمة الموردين — منطق نقي قابل للاختبار.
+/// 'active' = غير المؤرشفين فقط (كان الافتراضي بيرجّع الكل = بق الأرشفة)،
+/// 'archived' = المؤرشفين فقط، 'all' = الكل. أي قيمة غير معروفة = 'active'.
+List<Supplier> filterSuppliers(List<Supplier> all, String filter) {
+  switch (filter) {
+    case 'all':
+      return List<Supplier>.of(all);
+    case 'archived':
+      return all.where((s) => s.archived).toList();
+    case 'active':
+    default:
+      return all.where((s) => !s.archived).toList();
+  }
+}

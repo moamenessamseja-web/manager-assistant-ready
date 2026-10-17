@@ -119,4 +119,43 @@ void main() {
     expect(rows.any((r) => r.isLegacy && r.total == 1000), isTrue);
     expect(rows.any((r) => !r.isLegacy && r.total == 500), isTrue);
   });
+
+  group('أرشفة الموردين (Phase C)', () {
+    List<Supplier> three() {
+      final a = Supplier(id: 'a', name: 'محمود', itemType: 'بن');
+      final b = Supplier(id: 'b', name: 'جمال', itemType: 'لبن')..archived = true;
+      final c = Supplier(id: 'c', name: 'عجمي', itemType: 'سكر');
+      return [a, b, c];
+    }
+
+    test('المورد المؤرشف يختفي من النشطين تمامًا', () {
+      final active = filterSuppliers(three(), 'active');
+      expect(active.map((s) => s.id), ['a', 'c']);
+    });
+
+    test('المؤرشف يظهر في «المؤرشفون» و«الكل»', () {
+      expect(filterSuppliers(three(), 'archived').map((s) => s.id), ['b']);
+      expect(filterSuppliers(three(), 'all').length, 3);
+    });
+
+    test('قيمة فلتر غير معروفة = نشطون (مش الكل)', () {
+      expect(filterSuppliers(three(), 'whatever').length, 2);
+    });
+
+    test('الأرشفة وإلغاؤها يحفظان السجل والأرصدة وترجّع المورد للنشطين', () {
+      final list = three();
+      final s = list.first
+        ..purchases.add(SupplierPurchase(
+          id: 'p1', item: 'بن', quantity: 20, unit: 'كيلو', total: 2000,
+          date: DateTime(2026, 10, 1),
+        ));
+      s.archived = true;
+      expect(filterSuppliers(list, 'active').map((x) => x.id), ['c']);
+      expect(s.goodsTotal, 2000);
+      expect(s.balanceDue, 2000);
+      expect(s.purchases.length, 1);
+      s.archived = false;
+      expect(filterSuppliers(list, 'active').map((x) => x.id), ['a', 'c']);
+    });
+  });
 }
