@@ -346,7 +346,7 @@ class AssistantController {
         case ChoiceKind.person:
           final hit = p.options.where((o) => o.id == c.value).toList();
           if (hit.isEmpty) return '⚠️ الاختيار ده مش من الخيارات الحالية.';
-          return _resumeWithPick(p, hit.first, c.label);
+          return await _resumeWithPick(p, hit.first, c.label);
         case ChoiceKind.text:
           return await _handleInner(c.value);
       }
