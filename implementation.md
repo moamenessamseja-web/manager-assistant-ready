@@ -64,3 +64,6 @@ toolchain fingerprint — Implemented, not yet verified.
 | 76 | 25dbffe | green | **black screen** (plugin drift, not parser) |
 | 78 | 16e09ec | green | opens (owner confirmed) |
 | 79 | 3c8a886 | **red** (unused `_relativeDate`) | – |
+| 80 | 04a2849 | **red** (1 old test: `mark_attendance` mis-grouped in `_isConfident`; 66 others passed) | – |
+| 81 | 6134afd | green (analyze, 67 tests, APK) — Flutter 3.47.7 / Dart 3.13.5 | not yet |
+| 82 | pin commit | see HANDOFF (Flutter pinned to 3.47.7) | not yet |

@@ -10,7 +10,7 @@ is preserved at `.agent/mission_2026-10-16.md`.
 > (tag `baseline-build-75-user-confirmed`). `main` HEAD `25dbffe` = Build 76 is **untrusted** (owner
 > reported wrong behavior; tag `build-76-untrusted`). Work continues on branch `phase-b/from-32df13f`.
 > See "Session 4" in `.agent/IMPLEMENTATION_STATE.md` for the review findings and next steps.
-> Black-screen cause + fix: see "Build 76 black screen" in the state file. Test **release `build-78`** (branch build, commit `16e09ec`) first; it is the candidate to merge.
+> Black-screen cause + fix: see "Build 76 black screen" in the state file. Test the newest green branch build (**`build-82`**, else `build-81`) first. Build 78 was the black-screen fix and opens fine; 81/82 add Phases B+C. Do NOT merge to `main` before the owner confirms on device.
 > The text below predates this and is kept for history.
 
 - **User-confirmed working baseline:** commit `9f904c6`, tag `baseline-build-66`, GitHub release

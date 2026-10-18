@@ -57,6 +57,13 @@
 - `16e09ec`: pin `shared_preferences_android` to 2.4.28 (dependency_overrides); startup failures now show
   a readable error screen instead of a black screen; CI guard fails on plugin version drift.
   CI #78 green. Device behavior of APK 78 not yet confirmed by the owner.
+- `3c8a886`/`6134afd` Phase B: quantity is not money; explicit day+hour for reminders and expected deliveries (asked, never defaulted);
+  expected-delivery item/quantity/unit/total; attached-waw multi-names; short-reply slot filling; Gemini quantity/date fixes; duplicate-send guard.
+- Phase C: supplier archive filter root-cause fix; archived suppliers excluded from new transactions; real notification settings
+  (3 categories + lead time); Memory Reminders/Commitments cards open read-only lists.
+- CI: toolchain fingerprint in release notes, release targets built commit, Flutter pinned to 3.47.7.
+  Builds: #79 red (unused function), #80 red (case-grouping regression), #81 green (CI only).
+- Docs: `implementation.md` created (inventory, Brief roadmap, platform audit).
 - Docs: Build 75 (`32df13f`) designated as start; Build 76 (`25dbffe`) marked untrusted (tags
   `baseline-build-75-user-confirmed`, `build-76-untrusted`).
 

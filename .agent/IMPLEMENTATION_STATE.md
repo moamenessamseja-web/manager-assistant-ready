@@ -341,7 +341,7 @@ listed, not silently lost.
 
 
 ## Session 4 (2026-10-17) — Phase B re-start from 32df13f
-**Status: startup fix applied on branch `phase-b/from-32df13f` (commit `16e09ec`, CI build #78 green). Parser/Phase-B behavior work NOT started yet.**
+**Status: startup fix (#78, device-confirmed) + Phase B + Phase C + CI/docs work done on branch `phase-b/from-32df13f`; latest verified-green candidate = build #81 (`6134afd`), CI-only evidence. NOT yet merged to `main`, NOT yet device-tested.**
 
 Verified facts (from `git`/GitHub API, not assumed): runs #74, #75, #76 all green; release `build-75`
 and `build-76` each have `app-release.apk`; `25dbffe` touches only `lib/services/local_command_parser.dart`
@@ -397,3 +397,28 @@ path absent (matches 75). **NOT verified: that APK 78 opens on the owner's devic
 Other findings: CI debug-signs APKs with a per-runner key → installing a new APK over an old one may be
 refused (uninstall wipes local data). Fixed release keystore is a future P1 item. Branch builds publish
 `build-N` releases (#77, #78 are branch builds).
+
+
+### Session 4 — Phases B–F result (read this first next session)
+**Correction:** the earlier finding "`هيجيب` is not recognized as expected delivery" was WRONG — `c('هيجي')` already matches it.
+The real gaps were: no item/qty/date/time extraction, default-to-tomorrow, and `_missingFor` ignoring date/time.
+
+Done (all CI-green in #81: analyze, 67 tests, APK; **device behavior not yet verified by the owner**):
+- B: quantity ≠ money; day+hour explicit (asked, never defaulted); expected delivery fields; reminders (`فكرني/افتكر`) need day+hour;
+  attached-waw names; slot-filling for short replies (`extractSlots`); Gemini single-number fallback fixed; Gemini prompt told not to invent
+  dates and that quantities aren't money; duplicate-send guard (8 s, in-memory).
+- C: supplier archive (root cause: default filter returned all) + archived excluded from new transactions; `NotificationPrefs` wired into
+  scheduling + `NotificationSettingsScreen`; Memory cards → `RemindersListScreen`/`CommitmentsListScreen`.
+- D: Brief unchanged; roadmap documented in `implementation.md`.
+- E: audit in `implementation.md` §4. CI now records toolchain in release notes, targets releases at the built commit, pins Flutter 3.47.7
+  (build #82 verifies the pin), guards `shared_preferences_android == 2.4.28`.
+- F: this file, HANDOFF, CHANGELOG, `implementation.md`.
+CI lesson: analyzer *warnings* are fatal (unused private fn broke #79); a regression test caught a mis-grouped `case` in `_isConfident` (#80).
+
+Open / next (priority order):
+1. Owner device-tests build #82 (or #81): the 6 chat examples in `implementation.md` §1, reminders firing, archive, Memory cards, notification settings.
+2. Merge `phase-b/from-32df13f` → `main` only after (1); until then `main` HEAD `25dbffe` (Build 76) is the broken build.
+3. Not started: persisted message state/idempotency across restarts; confirmation prompt when an expected-delivery notification fires;
+   notification sound; category toggles for already-scheduled reminders; fixed signing key + non-`com.example` application id (OWNER DECISION);
+   committing/regenerating `android/` deterministically; iOS; reports/PDF (deferred by product decision).
+4. Unknown: why `pubspec.lock` was not honoured in CI (plugin 2.5.0 appeared). The guard + pin make it non-blocking.
