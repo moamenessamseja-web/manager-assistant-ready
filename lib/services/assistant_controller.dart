@@ -10,6 +10,7 @@ import 'local_command_parser.dart';
 import 'conversation_context_service.dart';
 import 'app_error_service.dart';
 import '../design/format.dart';
+import 'choice_builder.dart';
 
 /// نتيجة البحث عن كيان (موظف/مورد) بالاسم — بتميّز صراحة بين:
 /// "لقيت واحد بالظبط" و"لقيت أكتر من واحد (محتاج توضيح)" و"مفيش حد".
@@ -308,6 +309,52 @@ class AssistantController {
 
   /// استكمال عملية معلّقة من رد المستخدم (مبلغ/اسم ناقص، تأكيد، أو إلغاء).
   /// يرجع null لو الرد مش متعلق بالعملية المعلّقة (أمر جديد مستقل).
+  /// يكمّل العملية المعلّقة بعد اختيار شخص (بالكلام أو بزر) — نفس المسار، وكل
+  /// الحقول المجمّعة بتتراجع في `_safeDispatch` قبل أي كتابة.
+  static Future<String> _resumeWithPick(
+      PendingOperation p, ContextPerson pick, String text) async {
+    final merged = Map<String, dynamic>.from(p.fields)
+      ..['person'] = pick.name
+      ..['person_id'] = pick.id;
+    final still = p.missing.where((k) => !_hasVal(merged[k])).toList();
+    if (still.isEmpty) {
+      await ConversationContextService.clearPending();
+      return _safeDispatch(p.intent, {'intent': p.intent, ...merged}, text);
+    }
+    await ConversationContextService.setPending(
+        p.copyWith(fields: merged, missing: still, options: const []));
+    return _askFor(still, merged);
+  }
+
+  static bool _choiceBusy = false;
+
+  /// ضغطة زر اختيار. بتتأكد إنها تخص **نفس** العملية المعلّقة الحالية، وبتمنع
+  /// الضغط المزدوج، وبعدين بتمشي في نفس مسار الرد النصي (تحقق ثم تنفيذ).
+  static Future<String> handleChoice(String pendingId, ChatChoice c) async {
+    if (_choiceBusy) return '⏳ لحظة، الاختيار اللي قبله لسه بيتنفّذ.';
+    _choiceBusy = true;
+    try {
+      final p = ConversationContextService.pending();
+      if (p == null || p.id != pendingId) {
+        return '⚠️ الاختيار ده بتاع عملية قديمة أو اتنفّذت/اتلغت بالفعل. '
+            'ابعت الأمر من جديد لو لسه محتاجه.';
+      }
+      switch (c.kind) {
+        case ChoiceKind.cancel:
+          await ConversationContextService.clearPending();
+          return 'تمام، ألغيت العملية. 👍';
+        case ChoiceKind.person:
+          final hit = p.options.where((o) => o.id == c.value).toList();
+          if (hit.isEmpty) return '⚠️ الاختيار ده مش من الخيارات الحالية.';
+          return _resumeWithPick(p, hit.first, c.label);
+        case ChoiceKind.text:
+          return await _handleInner(c.value);
+      }
+    } finally {
+      _choiceBusy = false;
+    }
+  }
+
   static Future<String?> _tryResumePending(String text) async {
     final p = ConversationContextService.pending();
     if (p == null) return null;
@@ -321,19 +368,7 @@ class AssistantController {
     // اختيار من قائمة ملتبسة: «التاني» / «الثاني» / «الأول» / «رقم ٢».
     if (p.options.isNotEmpty) {
       final pick = _pickOption(n, p.options);
-      if (pick != null) {
-        final merged = Map<String, dynamic>.from(p.fields)
-          ..['person'] = pick.name
-          ..['person_id'] = pick.id;
-        final still = p.missing.where((k) => !_hasVal(merged[k])).toList();
-        if (still.isEmpty) {
-          await ConversationContextService.clearPending();
-          return _safeDispatch(p.intent, {'intent': p.intent, ...merged}, text);
-        }
-        await ConversationContextService.setPending(
-            p.copyWith(fields: merged, missing: still));
-        return _askFor(still);
-      }
+      if (pick != null) return _resumeWithPick(p, pick, text);
     }
 
     final parsed = LocalCommandParser.parse(text);

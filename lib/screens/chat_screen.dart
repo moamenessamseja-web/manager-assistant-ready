@@ -4,6 +4,8 @@ import 'package:uuid/uuid.dart';
 import '../services/assistant_controller.dart';
 import '../services/chat_history_service.dart';
 import '../services/app_error_service.dart';
+import '../services/choice_builder.dart';
+import '../services/conversation_context_service.dart';
 import '../design/tokens.dart';
 import '../design/app_theme.dart';
 
@@ -20,6 +22,8 @@ class _S extends State<ChatScreen> {
   final _scroll = ScrollController();
   final _stt = SpeechToText();
   bool _busy = false;
+  List<ChatChoice> _choices = const [];
+  String? _choicePendingId;
   bool _listening = false;
 
   /// يمنع إرسال النص الصوتي مرتين لنفس جلسة التسجيل (§7).
@@ -37,12 +41,14 @@ class _S extends State<ChatScreen> {
   /// استعادة الرسائل المحفوظة عند فتح الشاشة (§7).
   Future<void> _loadHistory() async {
     await ChatHistoryService.init();
+    await ConversationContextService.init();
     final saved = ChatHistoryService.all();
     if (!mounted) return;
     setState(() {
       _msgs
         ..clear()
         ..addAll(saved);
+      _refreshChoices(); // عملية معلّقة لسه صالحة بعد إعادة فتح الشاشة
     });
     _scrollToBottom();
   }
@@ -102,8 +108,26 @@ class _S extends State<ChatScreen> {
 
   /// إرسال رسالة — محمي من الإرسال المزدوج، ورسالة المستخدم لا تُفقد أبدًا
   /// حتى لو فشلت العملية (§7)، وأي خطأ يظهر كرسالة عربية مفهومة (§8).
-  Future<void> _send(String rawText) async {
+  Future<void> _send(String rawText) {
     final t = rawText.trim();
+    return _exec(t, () => AssistantController.handle(t));
+  }
+
+  /// ضغطة على زر اختيار: نفس مسار الإرسال، لكن مربوطة بمعرّف العملية المعلّقة.
+  Future<void> _sendChoice(ChatChoice c) {
+    final id = _choicePendingId;
+    if (id == null) return Future.value();
+    return _exec(c.label, () => AssistantController.handleChoice(id, c));
+  }
+
+  /// الأزرار بتتولّد من العملية المعلّقة الحالية (لو فيه واحدة وصالحة).
+  void _refreshChoices() {
+    final p = ConversationContextService.pending();
+    _choicePendingId = p?.id;
+    _choices = ChoiceBuilder.forPending(p);
+  }
+
+  Future<void> _exec(String t, Future<String> Function() action) async {
     if (t.isEmpty || _busy) return;
     _busy = true;
 
@@ -136,7 +160,7 @@ class _S extends State<ChatScreen> {
 
     String reply;
     try {
-      reply = await AssistantController.handle(t);
+      reply = await action();
     } catch (e, st) {
       AppErrorService.log('chat.handle', e, st);
       reply = AppErrorService.userMessage(e);
@@ -153,6 +177,7 @@ class _S extends State<ChatScreen> {
       _msgs.removeWhere((m) => m.id == statusMsg.id);
       _msgs.add(out);
       _busy = false;
+      _refreshChoices();
     });
     _scrollToBottom();
 
@@ -293,6 +318,10 @@ class _S extends State<ChatScreen> {
               color: AppColors.primary,
               minHeight: 2,
             ),
+
+          // أزرار الاختيار الخاصة بالعملية المعلّقة (لو فيه)
+          if (_choices.isNotEmpty && !_busy)
+            _ChoiceBar(choices: _choices, onTap: _sendChoice),
 
           // Input bar
           _InputBar(
@@ -510,6 +539,37 @@ class _Bubble extends StatelessWidget {
 }
 
 /// Input bar with mic toggle and send
+/// صف أزرار الاختيار — قصير وبيلف على أكتر من سطر في الشاشات الصغيرة.
+class _ChoiceBar extends StatelessWidget {
+  final List<ChatChoice> choices;
+  final void Function(ChatChoice) onTap;
+  const _ChoiceBar({required this.choices, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
+      child: Align(
+        alignment: AlignmentDirectional.centerStart,
+        child: Wrap(
+          spacing: 8,
+          runSpacing: 4,
+          children: [
+            for (final c in choices)
+              ActionChip(
+                label: Text(c.label),
+                avatar: c.kind == ChoiceKind.cancel
+                    ? const Icon(Icons.close, size: 16)
+                    : null,
+                onPressed: () => onTap(c),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _InputBar extends StatelessWidget {
   final TextEditingController controller;
   final bool listening;

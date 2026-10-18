@@ -17,6 +17,10 @@ class ContextPerson {
 
 /// عملية معلّقة تنتظر توضيحًا أو إكمال حقول (§4).
 class PendingOperation {
+  /// معرّف ثابت للعملية المعلّقة: أي زر اختيار بيحمله، فزر قديم ما يقدرش يعدّل
+  /// عملية أحدث بالغلط.
+  final String id;
+
   /// نية العملية الأصلية (mark_attendance / record_purchase / ...).
   final String intent;
 
@@ -32,12 +36,13 @@ class PendingOperation {
   final DateTime createdAt;
 
   PendingOperation({
+    String? id,
     required this.intent,
     required this.fields,
     required this.missing,
     this.options = const [],
     required this.createdAt,
-  });
+  }) : id = id ?? DateTime.now().microsecondsSinceEpoch.toString();
 
   PendingOperation copyWith({
     Map<String, dynamic>? fields,
@@ -45,6 +50,7 @@ class PendingOperation {
     List<ContextPerson>? options,
   }) =>
       PendingOperation(
+        id: id,
         intent: intent,
         fields: fields ?? this.fields,
         missing: missing ?? this.missing,
@@ -53,6 +59,7 @@ class PendingOperation {
       );
 
   Map<String, dynamic> toJson() => {
+        'id': id,
         'intent': intent,
         'fields': fields,
         'missing': missing,
@@ -61,6 +68,8 @@ class PendingOperation {
       };
 
   factory PendingOperation.fromJson(Map<String, dynamic> j) => PendingOperation(
+        // عمليات قديمة اتخزنت قبل ما الـ id يتضاف: نشتق id ثابت من وقت الإنشاء.
+        id: j['id'] as String? ?? (j['createdAt'] as String? ?? 'legacy'),
         intent: j['intent'] as String? ?? '',
         fields: Map<String, dynamic>.from(j['fields'] as Map? ?? {}),
         missing: List<String>.from(j['missing'] as List? ?? []),
