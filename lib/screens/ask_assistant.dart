@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
+import '../design/app_theme.dart';
 import '../design/tokens.dart';
 import '../services/app_error_service.dart';
 import '../services/assistant_controller.dart';
