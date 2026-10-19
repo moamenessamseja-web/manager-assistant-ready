@@ -7,7 +7,7 @@ import '../design/widgets.dart';
 import '../models/customer.dart';
 import '../services/app_state.dart';
 import '../services/storage_service.dart';
-import 'receivables_screen.dart' show money, parseMoney;
+import 'receivables_screen.dart' show parseMoney;
 
 /// حساب العميل: الرصيد + بيع آجل + دفعة + السجل. (عكس شاشة تفاصيل الموظف:
 /// مفيش حضور ولا سلف.)

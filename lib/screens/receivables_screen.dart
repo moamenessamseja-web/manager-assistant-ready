@@ -10,8 +10,6 @@ import '../services/local_command_parser.dart';
 import '../services/storage_service.dart';
 import 'customer_details_screen.dart';
 
-String money(double v) => '${v.toStringAsFixed(0)} ج';
-
 /// قراءة رقم من حقل نصي (أرقام عربية/إنجليزية). null لو فاضي/غلط.
 double? parseMoney(String raw) =>
     double.tryParse(LocalCommandParser.normalize(raw.trim()));
