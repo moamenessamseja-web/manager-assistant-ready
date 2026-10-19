@@ -6,6 +6,7 @@ import 'staff_screen.dart';
 import 'suppliers_screen.dart';
 import 'rules_screen.dart';
 import 'brief_screen.dart';
+import 'receivables_screen.dart';
 import 'settings_screen.dart';
 import 'notification_debug_screen.dart';
 import '../design/tokens.dart';
@@ -60,10 +61,10 @@ class _MainShellState extends State<MainShell> {
           Icons.psychology
         ),
         (
-          L.t('nav_brief'),
-          Icons.summarize_outlined,
-          Icons.summarize,
-          Icons.summarize
+          L.t('nav_receivables'),
+          Icons.request_quote_outlined,
+          Icons.request_quote,
+          Icons.request_quote
         ),
         (L.t('nav_staff'), Icons.people_outline, Icons.people, Icons.people),
         (
@@ -90,7 +91,7 @@ class _MainShellState extends State<MainShell> {
       TodayScreen(key: const ValueKey('tab-today')),
       ChatScreen(key: const ValueKey('tab-chat')),
       MemoryScreen(key: const ValueKey('tab-memory')),
-      BriefScreen(key: const ValueKey('tab-brief')),
+      ReceivablesScreen(key: const ValueKey('tab-receivables')),
       StaffScreen(key: const ValueKey('tab-staff')),
       SuppliersScreen(key: const ValueKey('tab-suppliers')),
     ];

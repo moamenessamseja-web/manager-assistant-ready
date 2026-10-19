@@ -8,6 +8,7 @@ import '../models/rule.dart';
 import '../models/reminder.dart';
 import 'app_state.dart';
 import 'app_error_service.dart';
+import '../models/customer.dart';
 
 /// تطبيع النص العربي: إزالة التشكيل، توحيد الألفات، تاء مربوطة، ياء.
 /// يُستخدم لمطابقة الأسماء في assistant_controller.dart بدل المقارنة الخام
@@ -211,6 +212,31 @@ class StorageService {
       if (s.archived && !includeArchived) return false;
       final sNorm = normalizeArabic(s.name);
       return sNorm.contains(normalized) || normalized.contains(sNorm);
+    }).toList();
+  }
+
+  // ---------------- Customers (المستحقات — بيع آجل) ----------------
+  static List<Customer> customers() =>
+      _read('customers', (j) => Customer.fromJson(j));
+
+  static Future<void> saveCustomer(Customer c) => _serialize(() async {
+        final x = customers()
+          ..removeWhere((a) => a.id == c.id)
+          ..add(c);
+        await _write(
+            'customers', x.map((a) => jsonEncode(a.toJson())).toList());
+        AppState.instance.notify();
+      });
+
+  /// المؤرشفون مستبعدون افتراضيًا (عملية جديدة ما تتسجلش على عميل مؤرشف).
+  static List<Customer> customersMatching(String name,
+      {bool includeArchived = false}) {
+    if (name.trim().isEmpty) return [];
+    final normalized = normalizeArabic(name);
+    return customers().where((c) {
+      if (c.archived && !includeArchived) return false;
+      final n = normalizeArabic(c.name);
+      return n.contains(normalized) || normalized.contains(n);
     }).toList();
   }
 
