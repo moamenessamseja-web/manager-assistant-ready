@@ -13,6 +13,7 @@ import '../design/app_theme.dart';
 import '../services/app_state.dart';
 import '../services/storage_service.dart';
 import '../design/strings.dart';
+import 'instructions_screen.dart';
 
 /// Premium Main Shell — 6-tab bottom navigation
 /// يستمع لـ AppState عشان يبني كل الشاشات من جديد بأحدث بيانات
@@ -75,8 +76,13 @@ class _MainShellState extends State<MainShell> {
 
   // Secondary screens (from drawer)
   List<String> get _secondaryTitles =>
-      [L.t('sec_rules'), L.t('sec_brief'), L.t('sec_settings')];
-  static const _secondaryIcons = [Icons.rule, Icons.insights, Icons.settings];
+      [L.t('sec_rules'), L.t('sec_brief'), L.t('sec_settings'), L.t('sec_help')];
+  static const _secondaryIcons = [
+    Icons.rule,
+    Icons.insights,
+    Icons.settings,
+    Icons.help_outline
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -147,6 +153,7 @@ class _MainShellState extends State<MainShell> {
       RulesScreen(key: const ValueKey('sec-rules')),
       BriefScreen(key: const ValueKey('sec-brief')),
       SettingsScreen(key: const ValueKey('sec-settings')),
+      InstructionsScreen(key: const ValueKey('sec-help')),
     ];
 
     return Drawer(

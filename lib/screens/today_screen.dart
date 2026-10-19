@@ -8,6 +8,12 @@ import '../design/app_theme.dart';
 import '../design/widgets.dart';
 import '../design/format.dart';
 import 'notification_debug_screen.dart';
+import '../services/assistant_controller.dart';
+import '../services/local_command_parser.dart';
+import 'ask_assistant.dart';
+import 'memory_lists.dart';
+import 'staff_screen.dart';
+import 'suppliers_screen.dart';
 
 /// اليوم — Premium Operational Dashboard
 /// يجيب أسئلة التشغيل الأربعة فورًا:
@@ -196,6 +202,7 @@ class _S extends State<TodayScreen> {
                 0,
               ),
               child: _PriorityAlert(
+                onTap: () => _open(context, const CommitmentsListScreen()),
                 count: overdue.length,
                 total: overdue
                     .where((c) => c.type == 'debt_to_collect')
@@ -203,6 +210,14 @@ class _S extends State<TodayScreen> {
               ),
             ),
           ),
+
+        // ── اسأل المساعد ─────────────────────────────────────
+        const SliverToBoxAdapter(
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(AppSpace.x4, AppSpace.x4, AppSpace.x4, 0),
+            child: AskAssistantBar(),
+          ),
+        ),
 
         // ── Key Metrics Grid ─────────────────────────────────
         SliverToBoxAdapter(
@@ -222,6 +237,7 @@ class _S extends State<TodayScreen> {
                     Expanded(
                       child: _MiniMetric(
                         label: 'التزامات اليوم',
+                        onTap: () => _open(context, const CommitmentsListScreen()),
                         value: '${dueToday.length}',
                         icon: Icons.today,
                         color: AppColors.primary,
@@ -231,6 +247,7 @@ class _S extends State<TodayScreen> {
                     Expanded(
                       child: _MiniMetric(
                         label: 'الحضور',
+                        onTap: () => _open(context, const StaffScreen()),
                         value: '$attendedToday/${activeEmployees.length}',
                         icon: Icons.people_outline,
                         color: absentToday > 0
@@ -246,6 +263,7 @@ class _S extends State<TodayScreen> {
                     Expanded(
                       child: _MiniMetric(
                         label: 'مستحق للموردين',
+                        onTap: () => _open(context, const SuppliersScreen()),
                         value: '${suppliersDue.toStringAsFixed(0)} ج',
                         icon: Icons.local_shipping_outlined,
                         color: suppliersDue > 0
@@ -257,6 +275,7 @@ class _S extends State<TodayScreen> {
                     Expanded(
                       child: _MiniMetric(
                         label: 'التزامات قادمة',
+                        onTap: () => _open(context, const CommitmentsListScreen()),
                         value: '${upcoming.length}',
                         icon: Icons.event_outlined,
                         color: AppColors.info,
@@ -506,17 +525,19 @@ class _MiniMetric extends StatelessWidget {
   final String value;
   final IconData icon;
   final Color color;
+  final VoidCallback? onTap;
 
   const _MiniMetric({
     required this.label,
     required this.value,
     required this.icon,
     required this.color,
+    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return AppCard(
+    final card = AppCard(
       elevated: true,
       padding: const EdgeInsets.all(AppSpace.x3),
       child: Row(
@@ -555,15 +576,28 @@ class _MiniMetric extends StatelessWidget {
         ],
       ),
     );
+    if (onTap == null) return card;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppRadius.md),
+      child: card,
+    );
   }
+}
+
+/// فتح شاشة من رقم/كارت في «اليوم» (للقراءة والمتابعة — مفيش تعديل بيانات).
+void _open(BuildContext context, Widget screen) {
+  Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
 }
 
 /// Priority alert banner for overdue items
 class _PriorityAlert extends StatelessWidget {
   final int count;
   final double total;
+  final VoidCallback? onTap;
 
-  const _PriorityAlert({required this.count, required this.total});
+  const _PriorityAlert(
+      {required this.count, required this.total, this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -586,7 +620,7 @@ class _PriorityAlert extends StatelessWidget {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: () {},
+          onTap: onTap,
           borderRadius: BorderRadius.circular(AppRadius.lg),
           child: Padding(
             padding: const EdgeInsets.all(AppSpace.x4),
@@ -751,6 +785,13 @@ class _CommitmentTile extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 IconButton(
+                  icon: Icon(Icons.chat_bubble_outline,
+                      size: 20, color: AppColors.textSecondary),
+                  onPressed: () => _ask(context),
+                  tooltip: 'اسأل المساعد',
+                  visualDensity: VisualDensity.compact,
+                ),
+                IconButton(
                   icon: Icon(Icons.snooze,
                       size: 20, color: AppColors.textSecondary),
                   onPressed: () => _postpone(context),
@@ -760,8 +801,11 @@ class _CommitmentTile extends StatelessWidget {
                 IconButton(
                   icon: Icon(Icons.check_circle_outline,
                       size: 20, color: AppColors.success),
-                  onPressed: () => _markDone(context),
-                  tooltip: 'تم',
+                  onPressed: () => commitment.type == 'supplier'
+                      ? _confirmReceipt(context)
+                      : _markDone(context),
+                  tooltip:
+                      commitment.type == 'supplier' ? 'تأكيد الاستلام' : 'تم',
                   visualDensity: VisualDensity.compact,
                 ),
               ],
@@ -770,6 +814,75 @@ class _CommitmentTile extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  /// «اسأل المساعد» عن هذا الكارت. للتوريد: سؤال حساب المورد الجاهز (استعلام
+  /// للقراءة فقط). لغيره: نفتح الورقة بسياق الكارت من غير ما نخترع سؤال.
+  void _ask(BuildContext context) {
+    final isSupplier = commitment.type == 'supplier';
+    showAskAssistantSheet(
+      context,
+      initialText: isSupplier ? 'حساب المورد ${commitment.person}' : '',
+      autoSend: isSupplier,
+      contextNote: 'بخصوص: ${commitment.person} — ${commitment.textOriginal}',
+    );
+  }
+
+  /// تأكيد استلام توريد متوقع: نسأل عن القيمة الفعلية (اختيارية) قبل ما نسجّل أي
+  /// حاجة. التسجيل نفسه عبر `receiveExpectedDelivery` (مرة واحدة بس).
+  Future<void> _confirmReceipt(BuildContext context) async {
+    final ctrl = TextEditingController(
+        text: commitment.amount == null
+            ? ''
+            : commitment.amount!.toStringAsFixed(0));
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('تأكيد استلام من ${commitment.person}'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(commitment.textOriginal),
+            const SizedBox(height: 12),
+            TextField(
+              controller: ctrl,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'القيمة الفعلية للتوريد (جنيه) — اختياري',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('إلغاء')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('تأكيد الاستلام')),
+        ],
+      ),
+    );
+    final raw = ctrl.text.trim();
+    ctrl.dispose();
+    if (ok != true || !context.mounted) return;
+    double? total;
+    if (raw.isNotEmpty) {
+      total = double.tryParse(LocalCommandParser.normalize(raw));
+      if (total == null || total <= 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('اكتب القيمة أرقام فقط وأكبر من صفر.')),
+        );
+        return;
+      }
+    }
+    final reply = await AssistantController.receiveExpectedDelivery(
+        commitment.id,
+        total: total);
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(reply)));
+    }
   }
 
   Future<void> _markDone(BuildContext context) async {

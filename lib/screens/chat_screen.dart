@@ -110,14 +110,14 @@ class _S extends State<ChatScreen> {
   /// حتى لو فشلت العملية (§7)، وأي خطأ يظهر كرسالة عربية مفهومة (§8).
   Future<void> _send(String rawText) {
     final t = rawText.trim();
-    return _exec(t, () => AssistantController.handle(t));
+    return _exec(t, (id) => AssistantController.handle(t, messageId: id));
   }
 
   /// ضغطة على زر اختيار: نفس مسار الإرسال، لكن مربوطة بمعرّف العملية المعلّقة.
   Future<void> _sendChoice(ChatChoice c) {
     final id = _choicePendingId;
     if (id == null) return Future.value();
-    return _exec(c.label, () => AssistantController.handleChoice(id, c));
+    return _exec(c.label, (_) => AssistantController.handleChoice(id, c));
   }
 
   /// الأزرار بتتولّد من العملية المعلّقة الحالية (لو فيه واحدة وصالحة).
@@ -127,7 +127,8 @@ class _S extends State<ChatScreen> {
     _choices = ChoiceBuilder.forPending(p);
   }
 
-  Future<void> _exec(String t, Future<String> Function() action) async {
+  Future<void> _exec(
+      String t, Future<String> Function(String messageId) action) async {
     if (t.isEmpty || _busy) return;
     _busy = true;
 
@@ -160,7 +161,7 @@ class _S extends State<ChatScreen> {
 
     String reply;
     try {
-      reply = await action();
+      reply = await action(userMsg.id);
     } catch (e, st) {
       AppErrorService.log('chat.handle', e, st);
       reply = AppErrorService.userMessage(e);

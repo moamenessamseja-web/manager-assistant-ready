@@ -7,6 +7,7 @@ import '../design/widgets.dart';
 import '../design/format.dart';
 import 'staff_screen.dart';
 import 'suppliers_screen.dart';
+import 'ask_assistant.dart';
 
 /// بريف الأسبوع — ملخص تشغيلي حي.
 /// كل رقم مهم يفتح المصدر بتاعه مباشرة.
@@ -62,6 +63,9 @@ class _BriefScreenState extends State<BriefScreen> {
           return ListView(
             padding: const EdgeInsets.all(AppSpace.x4),
             children: [
+              // اسأل المساعد — من البريف مباشرة
+              const AskAssistantBar(),
+              const SizedBox(height: AppSpace.x3),
               // Summary cards row
               Row(
                 children: [

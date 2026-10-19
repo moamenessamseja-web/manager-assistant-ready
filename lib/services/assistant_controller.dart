@@ -11,6 +11,7 @@ import 'conversation_context_service.dart';
 import 'app_error_service.dart';
 import '../design/format.dart';
 import 'choice_builder.dart';
+import 'idempotency_service.dart';
 
 /// نتيجة البحث عن كيان (موظف/مورد) بالاسم — بتميّز صراحة بين:
 /// "لقيت واحد بالظبط" و"لقيت أكتر من واحد (محتاج توضيح)" و"مفيش حد".
@@ -34,8 +35,16 @@ class AssistantController {
   static DateTime? _lastAt;
   static String _lastReply = '';
 
-  static Future<String> handle(String text) async {
-    // حماية من تكرار الإرسال (ضغطتين/إعادة محاولة): نفس النص خلال ٨ ثواني
+  static Future<String> handle(String text, {String? messageId}) async {
+    // (أ) منع تكرار دائم: نفس معرّف الرسالة اتنفّذ قبل كده (حتى لو التطبيق اتقفل
+    // واتفتح) → نرجّع الرد المسجّل من غير أي كتابة جديدة.
+    await IdempotencyService.init();
+    final idemKey = messageId == null ? null : 'msg:$messageId';
+    if (idemKey != null) {
+      final prev = IdempotencyService.lookup(idemKey);
+      if (prev != null) return prev;
+    }
+    // (ب) حماية من تكرار الإرسال (ضغطتين/إعادة محاولة): نفس النص خلال ٨ ثواني
     // بعد تنفيذ ناجح ما يتنفّذش تاني — عشان ما تتسجلش سلفة/دفعة مرتين.
     final key = LocalCommandParser.normalize(text.trim());
     final last = _lastAt;
@@ -48,6 +57,9 @@ class AssistantController {
           'لو عايزه فعلًا تاني ابعته بعد شوية.';
     }
     final reply = await _handleInner(text);
+    if (idemKey != null && reply.contains('✅')) {
+      await IdempotencyService.remember(idemKey, reply);
+    }
     _lastKey = key;
     _lastAt = DateTime.now();
     _lastReply = reply;
@@ -324,6 +336,36 @@ class AssistantController {
     await ConversationContextService.setPending(
         p.copyWith(fields: merged, missing: still, options: const []));
     return _askFor(still, merged);
+  }
+
+  /// تأكيد استلام توريد متوقع من كارت «اليوم» (بعد تأكيد المستخدم وقيمة فعلية
+  /// اختيارية). نفس مسار `mark_delivery_received`، ومحمي من التكرار بمفتاح ثابت
+  /// لكل التزام: ضغطتين/إعادة محاولة ما بيسجّلوش توريد مرتين.
+  static Future<String> receiveExpectedDelivery(String commitmentId,
+      {double? total}) async {
+    await IdempotencyService.init();
+    final key = 'receive:$commitmentId';
+    final prev = IdempotencyService.lookup(key);
+    if (prev != null) return prev;
+    final matches =
+        StorageService.commitments().where((x) => x.id == commitmentId);
+    if (matches.isEmpty) return '⚠️ الالتزام ده مش موجود.';
+    final c = matches.first;
+    if (c.status != 'pending') return '⚠️ الالتزام ده اتقفل بالفعل.';
+    if (c.type != 'supplier') return '⚠️ ده مش توريد متوقع.';
+    if (total != null && total <= 0) return '❓ القيمة لازم تكون أكبر من صفر.';
+    final d = <String, dynamic>{
+      'intent': 'mark_delivery_received',
+      'person': c.person,
+      'delivery_due': c.dueDate.toIso8601String(),
+      'text_original': 'تأكيد استلام من شاشة اليوم',
+      if (total != null) 'amount': total,
+      if (total != null) 'purchase_total': total,
+    };
+    final reply = await _safeDispatch(
+        'mark_delivery_received', d, 'تأكيد استلام من ${c.person}');
+    if (reply.contains('✅')) await IdempotencyService.remember(key, reply);
+    return reply;
   }
 
   static bool _choiceBusy = false;
@@ -847,7 +889,13 @@ class AssistantController {
     final s = resolved.value!;
     final pending = s.pendingDeliveries;
     if (pending.isEmpty) return '❓ مفيش توريدات متوقعة من ${s.name} حالياً.';
-    final del = pending.first;
+    var del = pending.first;
+    // تأكيد من كارت «اليوم»: نختار التوريد صاحب نفس الموعد مش «أول واحد».
+    final dueIso = DateTime.tryParse((d['delivery_due'] ?? '').toString());
+    if (dueIso != null) {
+      final m = pending.where((x) => x.expectedDate == dueIso);
+      if (m.isNotEmpty) del = m.first;
+    }
     del.received = true;
     del.receivedDate = DateTime.now();
     // لو ذُكرت قيمة (أو كمية × سعر) تُسجَّل كتوريد بقيمة مرتبط بهذا التوريد المتوقع.
@@ -859,6 +907,20 @@ class AssistantController {
     final added = _appendPurchase(s, merged);
     if (added != null) added.deliveryId = del.id;
     await StorageService.saveSupplier(s);
+    // الالتزام المرتبط بهذا التوريد المتوقع يتقفل (ويتلغي تنبيهه) — مش بيفضل
+    // «قائم» بعد ما البضاعة وصلت.
+    for (final c in StorageService.commitments()) {
+      if (c.status == 'pending' &&
+          c.type == 'supplier' &&
+          c.person == s.name &&
+          c.dueDate == del.expectedDate) {
+        c.status = 'done';
+        await StorageService.saveCommitment(c);
+        for (final r in StorageService.remindersForEntity(c.id)) {
+          await ReminderService.cancel(r.id);
+        }
+      }
+    }
     return '✅ تم تأكيد استلام ${del.item} من ${s.name}.'
         '${added != null ? ' أُضيف توريد بقيمة ${added.total.toStringAsFixed(0)} ج (المتبقي الآن ${s.balanceDue.toStringAsFixed(0)} ج).' : ' (من غير قيمة مسجّلة — سجّل القيمة لو عايز تتبّع الحساب.)'}';
   }
