@@ -433,3 +433,19 @@ Known small risk: the cancel regex `^(لا|الغي|...)` in `_tryResumePending`
 Next per the owner's plan: (a) Today-card actions + "اسأل المساعد" entry on Today/Brief + Instructions page (Priority 4-5);
 (b) persistent idempotency keys (message UUID stored with each transaction); (c) remove Gemini (only after chips are device-proven);
 (d) backup/restore, then package id + signing (OWNER decision); (e) merge to `main` only on the owner's explicit OK.
+
+
+### Session 4 (cont.) — Priority 4-5 + Priority 6 — CI green (#86, `cb5f5e7`)
+Implemented, **not yet device-verified** (CI: analyze + all tests + APK):
+- `AskAssistantBar` + bottom-sheet mini chat (`screens/ask_assistant.dart`) on **Today** and **Brief**; same engine/choices/history as the chat tab.
+- Today: metric cards + priority alert tappable (commitments list / staff / suppliers); commitment tiles get "اسأل المساعد"
+  (supplier tile → read-only `حساب المورد X` query); supplier-delivery ✔ = **confirm-receipt dialog** (optional actual value) via
+  `AssistantController.receiveExpectedDelivery` (one-shot, picks the delivery with the same due time, closes the commitment, cancels its reminder).
+  Previously ✔ on a supplier commitment closed it WITHOUT recording the delivery (data inconsistency) — fixed.
+- `InstructionsScreen` ("تعليمات الاستخدام") in the drawer after Settings.
+- `IdempotencyService` (persisted, 300 keys / 7 days): chat messages carry their UUID (`handle(text, messageId:)`), receipts use `receive:<commitmentId>`.
+  A re-sent message id or a second receipt tap returns the recorded reply and writes nothing. The 8 s in-memory text guard remains as a second layer.
+- Gemini intentionally **not removed** (owner wants to test first).
+Limits: idempotency covers chat messages and Today receipts only (not other direct UI forms); keys are not stored on the transaction records themselves;
+SharedPreferences remains the storage engine. CI lesson: #85 red = missing `app_theme.dart` import (`AppText`).
+Next: owner device-test; then Gemini removal (after approval), backup/restore, package id + signing (OWNER decision), money-vs-quantity chips.

@@ -23,7 +23,11 @@ Flow: text/voice → `AssistantController.handle` → pending-clarification resu
 | Duplicate-send guard | Implemented, not yet verified | identical normalized text within 8 s after a ✅ reply is not re-executed (in-memory only) |
 | Tappable clarification choices (Priority 3) | Implemented, not yet verified (CI #84) | `ChoiceBuilder` + `handleChoice` + chat `_ChoiceBar`; bound to `PendingOperation.id`; stale/double taps rejected |
 | Money-vs-quantity chips ("الرقم 500 تقصد بيه إيه؟") | Not started | parser currently decides by units/markers; ambiguous bare numbers ask for the amount instead |
-| Persisted message state / idempotency keys across restarts | Not started | 
+| Today cards actions + tappable metrics | Implemented, not yet verified (CI #86) | metrics/alert open lists; per-tile "اسأل المساعد"; supplier ✔ = confirm-receipt dialog |
+| "اسأل المساعد" on Today and Brief | Implemented, not yet verified | shared `AskAssistantBar` + sheet; reuses controller, choices, chat history |
+| Instructions page | Implemented, not yet verified | drawer item after Settings; 8 practical sections, no claim of full phrasing coverage |
+| Persistent duplicate prevention | Implemented, not yet verified | `IdempotencyService`; chat message ids + `receive:<id>`; not on other direct forms |
+| Persisted message state / idempotency keys across restarts | Partially implemented | see above; keys are not stored on the transaction records themselves | 
 | Confirm-before-post when expected delivery notification fires | Not started | notification only; `mark_delivery_received` is a typed command |
 | Unknown supplier name auto-creates a supplier (delivery/purchase) | Partially implemented (pre-existing) | archived-supplier names are refused, never duplicated |
 
@@ -70,4 +74,6 @@ toolchain fingerprint — Implemented, not yet verified.
 | 81 | 6134afd | green (analyze, 67 tests, APK) — Flutter 3.47.7 / Dart 3.13.5 | not yet |
 | 82 | fea404f | green (Flutter pinned 3.47.7) | owner-confirmed baseline per new vision doc |
 | 83 | 8ee9a5a | red (lint warning) | – |
-| 84 | 92e42e5 | green (chat choices) | not yet |
+| 84 | 92e42e5 | green (chat choices) | owner tested: works |
+| 85 | 4f6e1c8 | red (missing import) | – |
+| 86 | cb5f5e7 | green (Today/Brief/instructions/idempotency) | not yet |
