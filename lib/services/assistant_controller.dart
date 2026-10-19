@@ -3,7 +3,6 @@ import '../models/commitment.dart';
 import '../models/employee.dart';
 import '../models/supplier.dart';
 import '../models/rule.dart';
-import 'gemini_service.dart';
 import 'storage_service.dart';
 import 'reminder_service.dart';
 import 'local_command_parser.dart';
@@ -27,10 +26,9 @@ class AssistantController {
   /// نقطة الدخول الموحّدة. التسلسل (بريف §3 و§4):
   /// 1) استكمال عملية معلّقة من السياق.
   /// 2) المحلل المحلي — بدون إنترنت وبدون أي مفتاح.
-  /// 3) Gemini اختياري للأوامر المعقدة فقط (لو الخدمة مهيأة).
-  /// 4) رسالة واضحة لو ما فهمناش.
+  /// 3) رسالة واضحة + أمثلة لو ما فهمناش.
   ///
-  /// ممنوع أن يؤدي غياب الإنترنت أو مفتاح API إلى تعطيل أي عملية محلية.
+  /// المحرك محلي بالكامل: مفيش أي خدمة ذكاء اصطناعي خارجية ولا مفتاح API.
   static String? _lastKey;
   static DateTime? _lastAt;
   static String _lastReply = '';
@@ -83,18 +81,7 @@ class AssistantController {
       return _runLocal(fields, t, local.clarification);
     }
 
-    // (3) Gemini اختياري — للأوامر المعقدة فقط، وفشله لا يعطّل أي شيء محلي.
-    final key = StorageService.apiKey;
-    if (key.isNotEmpty) {
-      try {
-        final viaGemini = await _handleWithGemini(t, key);
-        if (viaGemini != null) return viaGemini;
-      } catch (_) {
-        // الخدمة الاختيارية سقطت — نكمل بالرسالة الواضحة تحت.
-      }
-    }
-
-    // (4) لم نفهم.
+    // (3) لم نفهم.
     return 'لم أفهم المطلوب بدقة. تقدر تقول مثلًا: "سجل حضور أحمد"، أو '
         '"خصم 500 من أحمد"، أو "مين محضرش النهارده؟".';
   }
@@ -107,7 +94,6 @@ class AssistantController {
   ) async {
     fields = Map<String, dynamic>.from(fields);
     final intent = fields['intent'] as String;
-    _normalizeRemindAt(fields);
 
     // عدة أشخاص (بمعرّفات محفوظة أو بأسماء) — يُنفَّذ على كل سجل ثم تُجمَع النتائج.
     final ids = <String>[
@@ -160,33 +146,6 @@ class AssistantController {
     }
     await ConversationContextService.clearPending();
     return _safeDispatch(intent, fields, text);
-  }
-
-  /// مسار Gemini القديم — أصبح اختياريًا بالكامل. يرجع null لو ما فهمش.
-  static Future<String?> _handleWithGemini(String text, String key) async {
-    final d = await GeminiService(key).parse(text);
-    final intent = d['intent'] ?? 'other';
-    if (intent == 'other') return null;
-
-    // موثوقية المبلغ: بعض النوايا محتاجة رقمًا. لو الموديل سابه فاضي،
-    // نعيد التحليل **مرة واحدة** — بدون اختراع أي رقم من عندنا.
-    if (_needsAmount.contains(intent) && _missingAmount(intent, d)) {
-      final retry = await GeminiService(key).parse(text);
-      if (!_missingAmount(intent, retry)) {
-        d
-          ..clear()
-          ..addAll(retry);
-      }
-    }
-
-    // آخر خط دفاع (آمن تمامًا): لو الجملة فيها **رقم واحد فقط** والمبلغ لسه
-    // ناقص، فهو المبلغ بلا لبس. لو فيه أكتر من رقم، منخمّنش ونسأل المستخدم.
-    if (_needsAmount.contains(intent) && _missingAmount(intent, d)) {
-      final only = _singleNumberInText(text);
-      if (only != null) d['amount'] = only;
-    }
-
-    return _runLocal(Map<String, dynamic>.from(d), text, null);
   }
 
   // ---------------- إكمال السياق (§4) ----------------
@@ -289,19 +248,6 @@ class AssistantController {
     final mm = int.parse(m.group(2)!);
     if (hh > 23 || mm > 59) return null;
     return DateTime(day.year, day.month, day.day, hh, mm);
-  }
-
-  /// Gemini ممكن يرجّع remind_at كاملة (تاريخ+وقت): نحوّلها ليوم + ساعة.
-  static void _normalizeRemindAt(Map<String, dynamic> f) {
-    if (_hasVal(f['time'])) return;
-    final ra = DateTime.tryParse(
-        (f['remind_at'] ?? '').toString().replaceFirst(' ', 'T'));
-    if (ra == null) return;
-    String two(int v) => v.toString().padLeft(2, '0');
-    f['time'] = '${two(ra.hour)}:${two(ra.minute)}';
-    if (!_hasVal(f['due_date'])) {
-      f['due_date'] = '${ra.year.toString().padLeft(4, '0')}-${two(ra.month)}-${two(ra.day)}';
-    }
   }
 
   static String _askFor(List<String> missing, [Map<String, dynamic>? f]) {
@@ -475,34 +421,6 @@ class AssistantController {
       if (first.isNotEmpty && n.contains(first)) return o;
     }
     return null;
-  }
-
-  /// النوايا اللي لازم يكون فيها رقم مالي.
-  static const Set<String> _needsAmount = {
-    'add_supplier_payment',
-    'add_advance',
-    'add_deduction',
-    'add_bonus',
-    'create_commitment',
-    'record_purchase',
-  };
-
-  /// يرجع الرقم المذكور في النص **فقط لو كان رقمًا واحدًا** (أرقام عربية أو
-  /// هندية أو إنجليزية). لو فيه أكتر من رقم، يرجع null — لأن الاختيار هيكون تخمين.
-  static double? _singleNumberInText(String text) {
-    // الكمية («٢٠ كيلو») والساعة والتاريخ مش مبلغ — نستبعدها قبل الاختيار.
-    final v = LocalCommandParser.extractSlots(text,
-        expect: const {'amount'})['amount'];
-    return v is num && v > 0 ? v.toDouble() : null;
-  }
-
-  /// هل الرقم المالي ناقص فعلًا في نتيجة التحليل؟
-  static bool _missingAmount(String intent, Map<String, dynamic> d) {
-    final hasAmount = ((d['amount'] as num?)?.toDouble() ?? 0) > 0;
-    if (intent == 'record_purchase') {
-      return !hasAmount && resolvePurchaseTotal(d) <= 0;
-    }
-    return !hasAmount;
   }
 
   /// النوايا اللي بتخص شخصًا واحدًا — لازم نحسم التباس الاسم قبل التنفيذ (§4).

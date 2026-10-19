@@ -162,7 +162,7 @@ void main() {
   });
 
   group('أوامر غير مفهومة', () {
-    test('نص عشوائي → other (يسقط لـ Gemini لو متاح أو يسأل)', () {
+    test('نص عشوائي → other (المساعد يرد برسالة «لم أفهم» ويقترح أمثلة)', () {
       final r = LocalCommandParser.parse('الجو حر النهارده');
       expect(r.isKnown, isFalse);
       expect(r.intent, 'other');

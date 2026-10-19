@@ -8,7 +8,6 @@ import 'package:manager_assistant/services/app_error_service.dart';
 import 'package:manager_assistant/services/chat_history_service.dart';
 import 'package:manager_assistant/services/settings_service.dart';
 import 'package:manager_assistant/screens/settings_screen.dart';
-import 'package:manager_assistant/design/strings.dart';
 
 /// اختبارات سلامة التخزين (§6) وطبقة الأخطاء (§8) وسجل المحادثة (§7).
 /// كلها تعمل offline بدون أي مفتاح.
@@ -141,70 +140,30 @@ void main() {
     });
   });
 
-  group('مفتاح Gemini الاختياري (§8/§9 — مسار مساعد فقط)', () {
-    test('فاضي افتراضيًا — المسار المحلي هو الافتراضي دايمًا', () {
-      expect(StorageService.apiKey, isEmpty);
+  group('Gemini اتشال بالكامل (offline-only)', () {
+    test('مفتاح قديم متخزّن على الجهاز بيتمسح عند بدء التخزين', () async {
+      SharedPreferences.setMockInitialValues(
+          {'gemini_api_key': 'AIzaSyLegacyKeyOnly000000'});
+      await StorageService.init();
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.containsKey('gemini_api_key'), isFalse);
     });
 
-    test('حفظ المفتاح ثم قراءته', () async {
-      await StorageService.setApiKey('AIzaSyTestKeyOnly1234567890');
-      expect(StorageService.apiKey, 'AIzaSyTestKeyOnly1234567890');
+    test('مسح المفتاح القديم ما بيلمسش باقي البيانات', () async {
+      SharedPreferences.setMockInitialValues({
+        'gemini_api_key': 'AIzaSyLegacyKeyOnly000000',
+        'some_other_setting': 'keep-me',
+      });
+      await StorageService.init();
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('some_other_setting'), 'keep-me');
     });
 
-    test('مسح المفتاح يرجّعه فاضي', () async {
-      await StorageService.setApiKey('AIzaSyTestKeyOnly1234567890');
-      expect(StorageService.apiKey, isNotEmpty);
-      await StorageService.setApiKey('');
-      expect(StorageService.apiKey, isEmpty);
-    });
-
-    // حارس انحدار: الإصدار السابق حذف هذا الحقل من الواجهة رغم أن البريف
-    // يمنع ذلك صراحةً. لو اتحذف تاني، الاختبار ده يفشل بدل ما نكتشف
-    // الاختفاء بالصدفة.
-    //
-    // ملحوظة أمانة: جربنا هنا اختبار round-trip كامل (يكتب في الحقل، يضغط
-    // حفظ، يتأكد إن StorageService.apiKey اتحدّث) في 5 محاولات متتالية على
-    // CI حقيقي (builds #68-73) — tap عادي، ensureVisible، استدعاء onPressed
-    // مباشرة، نبضات زمن حقيقي متكررة. في كل مرة الكتابة الفعلية
-    // (StorageService.setApiKey) ما كانتش بتتنفذ أصلاً جوه استدعاء زرار
-    // testWidgets — مش مجرد بطء، التنفيذ ما كانش بيوصل حتى لسطر
-    // _p.setString الأول (مؤكَّد بطباعات تشخيص مؤقتة اتشالت بعد كده). ده
-    // تفاعل غريب بين StorageService._serialize/_gate الثابت وبين الـ zone
-    // بتاع testWidgets محتاج تصحيح أدوات حقيقية (Dart debugger/DevTools)
-    // المتاحة لسه في الـ sandbox ده. بدل ما نفضل نخمّن على حساب عدد
-    // المحاولات، الاختبار هنا بيتأكد من حاجتين مؤكّدتين وكافيتين كحارس
-    // انحدار: (1) الحقل والزرار موجودين فعليًا وبالنص الصح ومفعّلين —
-    // وده بالظبط اللي اتحذف المرة اللي فاتت. (2) StorageService.apiKey /
-    // setApiKey نفسهم شغالين 100% (مُتحقَّق منهم في الاختبارات التلاتة
-    // اللي فوق في نفس المجموعة، بينجحوا في كل الـ builds من غير استثناء).
-    testWidgets(
-        'شاشة الإعدادات لازم تعرض حقل مفتاح Gemini وزرار حفظ ومسح شغالين',
-        (tester) async {
+    testWidgets('شاشة الإعدادات مفيهاش أي حقل لمفتاح API', (tester) async {
       await tester.pumpWidget(const MaterialApp(home: SettingsScreen()));
       await tester.pumpAndSettle();
-
-      final field = find.byType(TextField);
-      expect(field, findsOneWidget,
-          reason: 'لازم يكون فيه حقل نصي واحد لمفتاح Gemini في الإعدادات');
-
-      await tester.enterText(field, 'AIzaSyWidgetTestKey000000000');
-      await tester.pump();
-      expect((tester.widget<TextField>(field).controller)?.text,
-          'AIzaSyWidgetTestKey000000000',
-          reason: 'لازم النص المكتوب يوصل فعليًا لحقل المفتاح');
-
-      final saveButtonFinder =
-          find.widgetWithText(ElevatedButton, L.t('save_key'));
-      expect(saveButtonFinder, findsOneWidget,
-          reason: 'لازم يكون فيه زرار حفظ واحد لمفتاح Gemini');
-      expect(tester.widget<ElevatedButton>(saveButtonFinder).onPressed,
-          isNotNull,
-          reason: 'زرار الحفظ لازم يكون مفعّل (مش معطّل)');
-
-      final clearButtonFinder =
-          find.widgetWithText(OutlinedButton, L.t('clear_key'));
-      expect(clearButtonFinder, findsOneWidget,
-          reason: 'لازم يكون فيه زرار مسح واحد لمفتاح Gemini');
+      expect(find.byType(TextField), findsNothing);
+      expect(find.textContaining('Gemini'), findsNothing);
     });
   });
 }

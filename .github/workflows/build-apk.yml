@@ -170,7 +170,7 @@ jobs:
           # fixing those is a separate, broader cleanup, not a build-breaking bug.
           flutter analyze --no-fatal-infos 2>&1 | tee build_log.txt
 
-      - name: Run tests (offline suite — real Gemini integration tests are tagged "live" and skipped here)
+      - name: Run tests (offline suite)
         run: |
           set -o pipefail
           flutter test --exclude-tags live 2>&1 | tee -a build_log.txt

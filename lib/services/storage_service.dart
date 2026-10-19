@@ -52,6 +52,7 @@ class StorageService {
 
   static Future<void> init() async {
     _p = await SharedPreferences.getInstance();
+    await purgeLegacyApiKey();
   }
 
   // ═════════════════= أدوات داخلية ═════════════════
@@ -258,10 +259,12 @@ class StorageService {
   /// مفتاح الخدمة الإضافية الاختيارية. فاضي افتراضيًا، وله حقل في شاشة
   /// الإعدادات لإدخال مفتاح المستخدم نفسه (§8/§9). المحرك المحلي يفضل
   /// شغال بالكامل غيابه، ووجوده بيفتح مسار Gemini كاحتياطي فقط.
-  static String get apiKey => _p.getString('gemini_api_key') ?? '';
 
-  static Future<void> setApiKey(String v) => _serialize(() async {
-        final ok = await _p.setString('gemini_api_key', v);
-        if (!ok) throw StorageException('فشل حفظ الإعداد (gemini_api_key)');
+  /// مفتاح Gemini القديم (اتشال من التطبيق): بنمسحه من الجهاز عند أول تشغيل،
+  /// علشان ما يفضلش مفتاح حساب المستخدم متخزّن على هاتفه بدون استخدام.
+  static Future<void> purgeLegacyApiKey() => _serialize(() async {
+        if (_p.containsKey('gemini_api_key')) {
+          await _p.remove('gemini_api_key');
+        }
       });
 }

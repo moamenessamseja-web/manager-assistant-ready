@@ -39,20 +39,7 @@ class L {
     'lang_english': 'English',
     'language_note':
         'تغيير اللغة يغيّر اتجاه الواجهة (RTL/LTR). بياناتك كما هي.',
-    'gemini_key': 'مفتاح Gemini',
-    'gemini_hint': 'الصق المفتاح هنا',
-    'gemini_section_note':
-        'اختياري بالكامل: مسار مساعد إضافي للجُمل المعقدة اللي المحرك المحلي '
-        'لسه ما بيفهمهاش. التطبيق بيشتغل بكل ميزاته الأساسية من غير المفتاح ده.',
-    'save_key': 'حفظ المفتاح',
-    'clear_key': 'مسح المفتاح',
     'saved': 'تم الحفظ ✅',
-    'key_cleared': 'تم مسح المفتاح — التطبيق هيشتغل محليًا بالكامل.',
-    'key_configured': 'مفتاح محفوظ حاليًا ✅',
-    'key_not_configured':
-        'مفيش مفتاح محفوظ — التطبيق يشتغل بكل ميزاته الأساسية محليًا من غيره.',
-    'key_note':
-        'المفتاح محفوظ محليًا على جهازك فقط — لا يُرفع للمستودع ولا يُضمَّن في الكود.',
     'notif_diag': 'تشخيص الإشعارات',
     'notif_diag_sub': 'اعرف ليه تنبيه ما وصلش',
     'general': 'عام',
@@ -85,21 +72,7 @@ class L {
     'lang_english': 'English',
     'language_note':
         'Changing the language also flips the UI direction (RTL/LTR). Your data stays as-is.',
-    'gemini_key': 'Gemini API key',
-    'gemini_hint': 'Paste the key here',
-    'gemini_section_note':
-        'Fully optional: an extra fallback path for complex phrasing the local '
-        'engine does not understand yet. The app works with all core features '
-        'without this key.',
-    'save_key': 'Save key',
-    'clear_key': 'Clear key',
     'saved': 'Saved ✅',
-    'key_cleared': 'Key cleared — the app will run fully offline.',
-    'key_configured': 'A key is currently saved ✅',
-    'key_not_configured':
-        'No key saved — the app works with all core features offline without one.',
-    'key_note':
-        'The key is stored locally on your device only — never committed and never baked into source.',
     'notif_diag': 'Notification diagnostics',
     'notif_diag_sub': 'Find out why an alert did not arrive',
     'general': 'General',
