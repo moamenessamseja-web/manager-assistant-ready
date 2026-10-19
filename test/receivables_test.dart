@@ -138,7 +138,8 @@ void main() {
     });
 
     testWidgets('اسم مكرر مرفوض، واسم فاضي مرفوض', (tester) async {
-      await StorageService.saveCustomer(Customer(id: 'a', name: 'سالم'));
+      await tester.runAsync(() =>
+          StorageService.saveCustomer(Customer(id: 'a', name: 'سالم')));
       await tester.pumpWidget(const MaterialApp(home: ReceivablesScreen()));
       await tester.pump();
       await tester.tap(find.byIcon(Icons.person_add));
@@ -155,7 +156,7 @@ void main() {
 
     testWidgets('تسجيل دفعة من شاشة العميل يحدّث الرصيد', (tester) async {
       final c = Customer(id: 'a', name: 'سالم')..addSale(sale('s1', 500));
-      await StorageService.saveCustomer(c);
+      await tester.runAsync(() => StorageService.saveCustomer(c));
       await tester.pumpWidget(
           const MaterialApp(home: CustomerDetailsScreen(customerId: 'a')));
       await tester.pump();
@@ -171,7 +172,7 @@ void main() {
 
     testWidgets('عميل عليه فلوس ما ينفعش يتأرشف', (tester) async {
       final c = Customer(id: 'a', name: 'سالم')..addSale(sale('s1', 500));
-      await StorageService.saveCustomer(c);
+      await tester.runAsync(() => StorageService.saveCustomer(c));
       await tester.pumpWidget(
           const MaterialApp(home: CustomerDetailsScreen(customerId: 'a')));
       await tester.pump();

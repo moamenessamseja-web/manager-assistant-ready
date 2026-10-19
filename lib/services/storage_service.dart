@@ -288,9 +288,9 @@ class StorageService {
 
   /// مفتاح Gemini القديم (اتشال من التطبيق): بنمسحه من الجهاز عند أول تشغيل،
   /// علشان ما يفضلش مفتاح حساب المستخدم متخزّن على هاتفه بدون استخدام.
-  static Future<void> purgeLegacyApiKey() => _serialize(() async {
-        if (_p.containsKey('gemini_api_key')) {
-          await _p.remove('gemini_api_key');
-        }
-      });
+  static Future<void> purgeLegacyApiKey() async {
+    if (_p.containsKey('gemini_api_key')) {
+      await _p.remove('gemini_api_key');
+    }
+  }
 }

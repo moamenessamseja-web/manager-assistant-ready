@@ -69,14 +69,16 @@ void main() {
 
     testWidgets('كارت «التزامات» يفتح قائمة الالتزامات ويحافظ على السجلات',
         (tester) async {
-      await StorageService.saveCommitment(Commitment(
-        id: 'c1',
-        textOriginal: 'توريد لبن',
-        person: 'جمال',
-        type: 'supplier',
-        dueDate: DateTime(2030, 1, 1, 17),
-        remindAt: DateTime(2030, 1, 1, 17),
-      ));
+      // داخل testWidgets لازم الكتابة في التخزين تتم في المنطقة الحقيقية (runAsync)
+      // وإلا الاستمرارات تفضل معلّقة في FakeAsync بلا pump.
+      await tester.runAsync(() => StorageService.saveCommitment(Commitment(
+            id: 'c1',
+            textOriginal: 'توريد لبن',
+            person: 'جمال',
+            type: 'supplier',
+            dueDate: DateTime(2030, 1, 1, 17),
+            remindAt: DateTime(2030, 1, 1, 17),
+          )));
       await tester.pumpWidget(const MaterialApp(home: MemoryScreen()));
       await tester.pump();
       await tester.tap(find.text('التزامات'));
