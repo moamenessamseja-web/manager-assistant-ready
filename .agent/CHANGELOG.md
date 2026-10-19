@@ -63,6 +63,8 @@
   (3 categories + lead time); Memory Reminders/Commitments cards open read-only lists.
 - CI: toolchain fingerprint in release notes, release targets built commit, Flutter pinned to 3.47.7.
   Builds: #79 red (unused function), #80 red (case-grouping regression), #81 green (CI only).
+- Chat choices (Priority 3): `PendingOperation.id`, `ChoiceBuilder`, `handleChoice`, chat choice bar + tests. CI #83 red (lint), #84 green.
+- Docs: all working docs consolidated into `.agent/` with a README index; owner's Implementation Plan added there.
 - Docs: `implementation.md` created (inventory, Brief roadmap, platform audit).
 - Docs: Build 75 (`32df13f`) designated as start; Build 76 (`25dbffe`) marked untrusted (tags
   `baseline-build-75-user-confirmed`, `build-76-untrusted`).

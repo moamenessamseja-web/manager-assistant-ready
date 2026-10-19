@@ -21,7 +21,9 @@ Flow: text/voice → `AssistantController.handle` → pending-clarification resu
 | Reminder (`فكرني/افتكر`) | Implemented, not yet verified | person=`عام`; requires day + time; no default "tomorrow 09:00" |
 | Attached waw (`محمود وخالد`) | Implemented, not yet verified | `وليد/وائل…` kept via `_waNames` allowlist |
 | Duplicate-send guard | Implemented, not yet verified | identical normalized text within 8 s after a ✅ reply is not re-executed (in-memory only) |
-| Persisted message state / idempotency keys across restarts | Not started | |
+| Tappable clarification choices (Priority 3) | Implemented, not yet verified (CI #84) | `ChoiceBuilder` + `handleChoice` + chat `_ChoiceBar`; bound to `PendingOperation.id`; stale/double taps rejected |
+| Money-vs-quantity chips ("الرقم 500 تقصد بيه إيه؟") | Not started | parser currently decides by units/markers; ambiguous bare numbers ask for the amount instead |
+| Persisted message state / idempotency keys across restarts | Not started | 
 | Confirm-before-post when expected delivery notification fires | Not started | notification only; `mark_delivery_received` is a typed command |
 | Unknown supplier name auto-creates a supplier (delivery/purchase) | Partially implemented (pre-existing) | archived-supplier names are refused, never duplicated |
 
@@ -66,4 +68,6 @@ toolchain fingerprint — Implemented, not yet verified.
 | 79 | 3c8a886 | **red** (unused `_relativeDate`) | – |
 | 80 | 04a2849 | **red** (1 old test: `mark_attendance` mis-grouped in `_isConfident`; 66 others passed) | – |
 | 81 | 6134afd | green (analyze, 67 tests, APK) — Flutter 3.47.7 / Dart 3.13.5 | not yet |
-| 82 | pin commit | see HANDOFF (Flutter pinned to 3.47.7) | not yet |
+| 82 | fea404f | green (Flutter pinned 3.47.7) | owner-confirmed baseline per new vision doc |
+| 83 | 8ee9a5a | red (lint warning) | – |
+| 84 | 92e42e5 | green (chat choices) | not yet |

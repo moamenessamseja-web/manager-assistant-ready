@@ -422,3 +422,14 @@ Open / next (priority order):
    notification sound; category toggles for already-scheduled reminders; fixed signing key + non-`com.example` application id (OWNER DECISION);
    committing/regenerating `android/` deterministically; iOS; reports/PDF (deferred by product decision).
 4. Unknown: why `pubspec.lock` was not honoured in CI (plugin 2.5.0 appeared). The guard + pin make it non-blocking.
+
+
+### Session 4 (cont.) — Priority 3: tappable clarification choices — CI green (#84, `92e42e5`)
+Implemented, **not yet device-verified**: `PendingOperation.id` (legacy-safe), `ChoiceBuilder` (buttons generated from the real
+pending state: ambiguous people by real id, missing day, missing/ambiguous hour, cancel; past hours hidden for today),
+`AssistantController.handleChoice` (stale-id rejection, double-tap block, same validated resume path), chat `_ChoiceBar`
+(also restored after reopening the screen). Tests: `test/choices_test.dart`. CI lessons: #83 red = `unawaited_return_in_try_block` warning.
+Known small risk: the cancel regex `^(لا|الغي|...)` in `_tryResumePending` also matches text that merely *starts* with "لا" (e.g. a name like لاشين).
+Next per the owner's plan: (a) Today-card actions + "اسأل المساعد" entry on Today/Brief + Instructions page (Priority 4-5);
+(b) persistent idempotency keys (message UUID stored with each transaction); (c) remove Gemini (only after chips are device-proven);
+(d) backup/restore, then package id + signing (OWNER decision); (e) merge to `main` only on the owner's explicit OK.
