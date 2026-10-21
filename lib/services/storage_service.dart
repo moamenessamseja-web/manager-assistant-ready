@@ -53,6 +53,7 @@ class StorageService {
 
   static Future<void> init() async {
     _p = await SharedPreferences.getInstance();
+    _gate = Future<void>.value(); // سلسلة كتابة جديدة (مفيش كتابة قديمة معلّقة)
     await purgeLegacyApiKey();
   }
 

@@ -11,6 +11,16 @@ CreditSale sale(String id, double total, {DateTime? d}) => CreditSale(
 CustomerPayment pay(String id, double a, {DateTime? d}) =>
     CustomerPayment(id: id, amount: a, date: d ?? DateTime(2026, 10, 2));
 
+/// داخل testWidgets الكتابة اللي بتبدأ من الواجهة بتحتاج حلقة أحداث حقيقية
+/// (runAsync) + pump بالتناوب، وإلا فضلت معلّقة وسمّمت الاختبارات اللي بعدها.
+Future<void> settleStorage(WidgetTester t) async {
+  for (var i = 0; i < 6; i++) {
+    await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 30)));
+    await t.pump();
+  }
+  await t.pumpAndSettle();
+}
+
 void main() {
   group('Customer — حسابات المستحقات', () {
     test('الرصيد = المبيعات − المدفوع', () {
@@ -129,7 +139,7 @@ void main() {
       await tester.enterText(
           find.widgetWithText(TextField, 'رصيد سابق عليه (اختياري)'), '٣٠٠');
       await tester.tap(find.text('حفظ'));
-      await tester.pumpAndSettle();
+      await settleStorage(tester);
       final saved = StorageService.customers();
       expect(saved.length, 1);
       expect(saved.single.name, 'سالم');
@@ -165,7 +175,7 @@ void main() {
       await tester.enterText(
           find.widgetWithText(TextField, 'المبلغ المدفوع (جنيه)'), '200');
       await tester.tap(find.text('حفظ'));
-      await tester.pumpAndSettle();
+      await settleStorage(tester);
       expect(StorageService.customers().single.balanceDue, 300);
       expect(StorageService.customers().single.payments.length, 1);
     });
