@@ -449,3 +449,21 @@ Implemented, **not yet device-verified** (CI: analyze + all tests + APK):
 Limits: idempotency covers chat messages and Today receipts only (not other direct UI forms); keys are not stored on the transaction records themselves;
 SharedPreferences remains the storage engine. CI lesson: #85 red = missing `app_theme.dart` import (`AppText`).
 Next: owner device-test; then Gemini removal (after approval), backup/restore, package id + signing (OWNER decision), money-vs-quantity chips.
+
+
+### Session 4 (cont.) — Gemini removed + Receivables tab — CI green (#92, `1565f25`) on branch `phase-b/from-32df13f`
+`main` is still `667ebc7` (Build 87, owner-confirmed). Branch is NOT merged: owner must device-test build-92 first.
+Implemented, **not yet device-verified**:
+- **Gemini/external AI removed completely**: service + live test deleted, controller fallback and helpers removed, Settings API-key UI + strings removed,
+  `StorageService.apiKey` removed, `http` dependency removed, legacy `gemini_api_key` purged from the device on startup (other prefs untouched).
+  `INTERNET` permission intentionally KEPT (voice behaviour without it is not device-verified) — candidate to remove after a device test.
+- **Receivables (المستحقات)**: `Customer/CreditSale/CustomerPayment` (`models/customer.dart`), storage `customers()/saveCustomer/customersMatching`,
+  `ReceivablesScreen` replaces the main **Brief tab** (Brief remains in the drawer), `CustomerDetailsScreen` (credit sale, payment, history,
+  archive blocked while balance > 0). Idempotent `addSale/addPayment` by id; overpayment = credit balance; total receivables = debtors' balances.
+CI lessons (important for any future widget tests): (1) inside `testWidgets` a storage write started by the UI never completes without
+`tester.runAsync` + `pump` loops (see `settleStorage` in `test/receivables_test.dart`); a stuck write poisons the static write gate for later tests —
+`StorageService.init()` now resets it; seed data with `tester.runAsync(...)`. (2) `ListTile` inside a decorated `AppCard` needs a `Material` ancestor.
+(3) `money()` already exists in `design/format.dart`. Builds: #88 red (hanging old test), #89 red (name clash), #90/#91 red (widget tests), #92 green.
+Next: owner device-test build-92 → merge to main on OK; chat intents for customers (`add_customer`, `customer_sale`, `customer_payment`);
+Backup/restore; money-vs-quantity chips; repository layer; then LAST: package id + signing (owner decision). Owner's own later changes:
+logo, internal design, start page + password login.

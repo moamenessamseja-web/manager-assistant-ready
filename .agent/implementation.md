@@ -29,6 +29,10 @@ Flow: text/voice → `AssistantController.handle` → pending-clarification resu
 | Persistent duplicate prevention | Implemented, not yet verified | `IdempotencyService`; chat message ids + `receive:<id>`; not on other direct forms |
 | Persisted message state / idempotency keys across restarts | Partially implemented | see above; keys are not stored on the transaction records themselves | 
 | Confirm-before-post when expected delivery notification fires | Not started | notification only; `mark_delivery_received` is a typed command |
+| Gemini / external AI | **Removed** (CI #92, not device-verified) | no API key, no `http`; legacy key purged at startup; `INTERNET` permission kept pending a voice test |
+| Receivables tab (customers, credit sales, payments) | Implemented, not yet verified (CI #92) | replaces main Brief tab; Brief still in drawer; manual UI only |
+| Chat commands for customers (credit sale / payment) | Not started | next step |
+| Backup / restore | Not started | |
 | Unknown supplier name auto-creates a supplier (delivery/purchase) | Partially implemented (pre-existing) | archived-supplier names are refused, never duplicated |
 
 ## 2. Data & navigation (Phase C)
@@ -76,4 +80,7 @@ toolchain fingerprint — Implemented, not yet verified.
 | 83 | 8ee9a5a | red (lint warning) | – |
 | 84 | 92e42e5 | green (chat choices) | owner tested: works |
 | 85 | 4f6e1c8 | red (missing import) | – |
-| 86 | cb5f5e7 | green (Today/Brief/instructions/idempotency) | not yet |
+| 86 | cb5f5e7 | green (Today/Brief/instructions/idempotency) | merged → main |
+| 87 | 667ebc7 (main) | green | owner confirmed |
+| 88-91 | – | red (widget-test/storage-gate/name-clash/ListTile issues, see state file) | – |
+| 92 | 1565f25 | green (Gemini removed + Receivables tab, 101 tests) | not yet |

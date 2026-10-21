@@ -63,6 +63,8 @@
   (3 categories + lead time); Memory Reminders/Commitments cards open read-only lists.
 - CI: toolchain fingerprint in release notes, release targets built commit, Flutter pinned to 3.47.7.
   Builds: #79 red (unused function), #80 red (case-grouping regression), #81 green (CI only).
+- Gemini / external AI removed completely; legacy key purged at startup; `http` dropped. (branch, CI #92 green)
+- Receivables (المستحقات) tab: customers, credit sales, payments; replaces the main Brief tab (Brief stays in drawer). (branch, CI #92 green)
 - Priorities 4-6: AskAssistantBar + sheet (Today, Brief), tappable Today metrics, confirm-receipt dialog for expected deliveries (also closes the commitment),
   instructions page, persistent `IdempotencyService`. CI #85 red (import), #86 green.
 - Chat choices (Priority 3): `PendingOperation.id`, `ChoiceBuilder`, `handleChoice`, chat choice bar + tests. CI #83 red (lint), #84 green.
