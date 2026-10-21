@@ -206,7 +206,9 @@ class _CustomerTile extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: AppSpace.x2),
       child: AppCard(
         padding: EdgeInsets.zero,
-        child: ListTile(
+        child: Material(
+          color: Colors.transparent,
+          child: ListTile(
           leading: CircleAvatar(
             backgroundColor: color.withValues(alpha: 0.12),
             child: Icon(Icons.person_outline, color: color),
@@ -239,6 +241,7 @@ class _CustomerTile extends StatelessWidget {
             MaterialPageRoute(
                 builder: (_) => CustomerDetailsScreen(customerId: customer.id)),
           ),
+        ),
         ),
       ),
     );
