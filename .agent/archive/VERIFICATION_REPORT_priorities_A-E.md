@@ -1,3 +1,5 @@
+> **ARCHIVED.** Independent verification of old Priority A-E fixes at commit 2189cad. Historical.
+
 # Independent Verification Report — prior "Priority A–E" fixes
 
 - **Baseline:** `main @ 2189cad` (user-designated baseline = build #56)

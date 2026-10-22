@@ -1,3 +1,17 @@
+# Changelog
+
+## Session 4-5 — 2026-10-17 → 2026-10-22 (branch `phase-b/from-32df13f`; `main`=`667ebc7`)
+- **Build 93** — reminders/notifications rebuilt: rules now schedule real future notifications (series), exact alarms when allowed, `ReminderManager`
+  (one-off create/edit/delete/done, rules create/edit/toggle/delete), Rules screen with 2 tabs + alarm-style editor (date + hour/minute/ص-م), exact-alarm row in settings,
+  `SCHEDULE_EXACT_ALARM` in CI, `Reminder.anchor`, `StorageService.deleteCommitment`; Dues AppBar title fixed + date/time line; `.agent` restructured (ENGINEERING_RULES, ARCHITECTURE, archive/).
+- **Build 92** (owner-confirmed) — Gemini/external AI removed; Receivables (المستحقات) tab replaces the main Brief tab.
+- **Build 86/87** (87 owner-confirmed, = `main`) — Today/Brief "اسأل المساعد", Today receipt confirmation, instructions page, persistent `IdempotencyService`.
+- **Build 84** (owner-confirmed) — tappable chat choices bound to pending-operation ids.
+- Builds 78-82 — black-screen fix (plugin pin + startup error screen), Phases B/C (quantity≠money, explicit day+hour, supplier archive fix, notification settings, Memory cards), CI hardening.
+- Red builds are logged in `IMPLEMENTATION_STATE.md` with causes (#79-#80, #83, #85, #88-#91).
+
+---
+## Earlier versions
 # 1.3.1+5 (builds #66-74)
 - إصلاح: **استعادة حقل مفتاح Gemini في شاشة الإعدادات** (كان اتشال في 1.2.0+3
   بالمخالفة لتعليمات البريف الصريحة بالحفاظ عليه). المحرك المحلي يفضل هو

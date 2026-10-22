@@ -1,3 +1,5 @@
+> **ARCHIVED.** Architecture as of commit 7325737 (pre-Phase B, still had Gemini). Current: `../ARCHITECTURE.md`.
+
 # Architecture Audit — commit 7325737
 
 ## Framework & Language

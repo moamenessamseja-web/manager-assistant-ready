@@ -2,7 +2,7 @@
 
 > Living document. **Statuses** (never promote without evidence): Verified complete · Implemented, not yet verified ·
 > Partially implemented · Not started · Blocked · Deferred by product decision.
-> Last updated: 2026-10-17 (Session 4, branch `phase-b/from-32df13f`). Start point: `32df13f` = Build 75.
+> Last updated: 2026-10-22 (branch `phase-b/from-32df13f`, latest green = Build 93). Owner-confirmed on device: build 92 (branch), build 87 (`main`).
 > Evidence levels: *CI* = analyze + `flutter test` + APK build on GitHub Actions; *Device* = owner ran the APK.
 > No Dart/Flutter SDK is available to the engineering sessions, so nothing is "run locally".
 
@@ -40,10 +40,24 @@ Flow: text/voice → `AssistantController.handle` → pending-clarification resu
 |---|---|---|
 | Supplier archive | Implemented, not yet verified | root cause: default `active` filter returned *all*. Now `filterSuppliers()` (models/supplier.dart); `suppliersMatching` excludes archived; chat refuses archived names |
 | Memory cards Reminders / Commitments | Implemented, not yet verified | read-only `RemindersListScreen` / `CommitmentsListScreen` (`screens/memory_lists.dart`), empty states, widget tests |
-| Notification settings | Implemented, not yet verified | `NotificationPrefs` (3 categories + lead time) wired into `ReminderService`; screen reached from AppBar of "القواعد والتنبيهات". Applies to **new** reminders only |
+| Notification settings | Implemented (owner confirmed screen works in 92) | `NotificationPrefs` (3 categories + lead time) wired into `ReminderService`; screen reached from AppBar of "القواعد والتنبيهات". Applies to **new** reminders only |
 | Notification sound selection | Not started / limitation | Android channel sound is immutable after creation; needs a new channel id + `res/raw` sound — native work, not done |
 | Bell vs settings | Documented | Bell → `NotificationDebugScreen` (status/diagnostics of reminders). Side menu "القواعد والتنبيهات" → `RulesScreen` (+ settings via AppBar `tune`). Intentionally different screens |
 | Rule→category mapping | Partially | rules → `rules`, supplier deliveries → `suppliers`, rest → `reminders`; stored reminders don't keep their category, so `rescheduleAllActive` ignores the toggles (only lead time) |
+
+## 2b. Reminders & notifications — sidebar as the primary manager (Build 93)
+| Item | Status | Notes |
+|---|---|---|
+| Rules & Notifications screen = real manager (create/view/edit/delete) | Implemented, not yet verified on device (CI #93) | 2 tabs; `ReminderManager` → same `Commitment`/`Reminder`/`FollowUpRule` records as chat |
+| One-off reminders persist, appear in Today + Memory lists | Implemented, not yet verified | `Commitment(type:'task')` + `Reminder`; restart-persistence unit tests pass |
+| Alarm-style time field (hour / minute / ص-م) + date picker on the alarm FAB dialog | Implemented, not yet verified | `AlarmTimeField`, `ReminderEditorDialog` |
+| Real scheduling at the chosen time | Implemented (CI via fake backend); device: **not verified** | exact alarms when permitted, otherwise inexact + warning |
+| Recurring rules notify with the app closed | Implemented (series of future notifications), device: **not verified** | refreshed at app open |
+| Survives device reboot | Partially implemented / **not verified** | plugin boot receiver (CI manifest) + re-arm at app open |
+| Exact-alarm permission handling | Implemented, not yet verified | settings row + "السماح" |
+| Rules previously never notified (bug) | Fixed (root cause documented) | see `IMPLEMENTATION_STATE.md` |
+| Dues page heading + time beside day/date | Implemented, not yet verified | title was hard-coded in `main_shell` |
+| Chat understanding of colloquial reminder phrasing | Not started (owner item 4) | sidebar no longer depends on it |
 
 ## 3. Brief — roadmap only (Phase D) — Deferred by product decision
 Current Brief (side menu + main screen) is **unchanged and functional**; nothing in this session implements reporting.
@@ -83,4 +97,5 @@ toolchain fingerprint — Implemented, not yet verified.
 | 86 | cb5f5e7 | green (Today/Brief/instructions/idempotency) | merged → main |
 | 87 | 667ebc7 (main) | green | owner confirmed |
 | 88-91 | – | red (widget-test/storage-gate/name-clash/ListTile issues, see state file) | – |
-| 92 | 1565f25 | green (Gemini removed + Receivables tab, 101 tests) | not yet |
+| 92 | 1565f25 | green (Gemini removed + Receivables tab, 101 tests) | owner confirmed |
+| 93 | d2a17ef | green (reminders/notifications rebuild) | not yet |
