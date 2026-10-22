@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 import '../design/app_theme.dart';
@@ -62,9 +64,11 @@ class _ReceivablesScreenState extends State<ReceivablesScreen> {
 
     return CustomScrollView(
       slivers: [
+        const SliverToBoxAdapter(child: _DateTimeLine()),
         SliverToBoxAdapter(
           child: Padding(
-            padding: const EdgeInsets.all(AppSpace.x4),
+            padding: const EdgeInsets.fromLTRB(
+                AppSpace.x4, 0, AppSpace.x4, AppSpace.x4),
             child: Row(
               children: [
                 Expanded(
@@ -149,6 +153,50 @@ class _ReceivablesScreenState extends State<ReceivablesScreen> {
     await showDialog<void>(
       context: context,
       builder: (_) => const _AddCustomerDialog(),
+    );
+  }
+}
+
+/// اليوم والتاريخ + الوقت الحالي (12 ساعة ص/م) — بيتحدّث لوحده.
+class _DateTimeLine extends StatefulWidget {
+  const _DateTimeLine();
+  @override
+  State<_DateTimeLine> createState() => _DateTimeLineState();
+}
+
+class _DateTimeLineState extends State<_DateTimeLine> {
+  Timer? _timer;
+  DateTime _now = DateTime.now();
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(seconds: 20), (_) {
+      if (mounted) setState(() => _now = DateTime.now());
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+          AppSpace.x4, AppSpace.x4, AppSpace.x4, AppSpace.x2),
+      child: Row(
+        children: [
+          const Icon(Icons.calendar_today_outlined, size: 16),
+          const SizedBox(width: 6),
+          Expanded(child: Text(arabicDate(_now), style: AppText.caption)),
+          const Icon(Icons.access_time, size: 16),
+          const SizedBox(width: 4),
+          Text(clockTime12(_now), style: AppText.caption),
+        ],
+      ),
     );
   }
 }

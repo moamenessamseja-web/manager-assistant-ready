@@ -42,6 +42,16 @@ String money(num value, {String suffix = 'ج'}) {
 String arabicDate(DateTime d) =>
     '${_arWeekdays[d.weekday]} ${d.day} ${_arMonths[d.month - 1]} ${d.year}';
 
+/// وقت 12 ساعة بصباح/مساء: "09:05 ص" / "05:30 م" (زي منبه الموبايل).
+String clockTime12(DateTime d) {
+  final pm = d.hour >= 12;
+  final h = d.hour % 12 == 0 ? 12 : d.hour % 12;
+  return '${h.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')} ${pm ? 'م' : 'ص'}';
+}
+
+/// تاريخ + وقت 12 ساعة: "الأحد 20 أكتوبر 2026 · 09:05 ص".
+String arabicDateTime12(DateTime d) => '${arabicDate(d)} · ${clockTime12(d)}';
+
 /// وقت 24 ساعة: "09:05"
 String clockTime(DateTime d) =>
     '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';

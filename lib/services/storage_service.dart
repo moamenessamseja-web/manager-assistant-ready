@@ -130,6 +130,13 @@ class StorageService {
         AppState.instance.notify();
       });
 
+  static Future<void> deleteCommitment(String id) => _serialize(() async {
+        final x = commitments()..removeWhere((e) => e.id == id);
+        await _write(
+            'commitments', x.map((e) => jsonEncode(e.toJson())).toList());
+        AppState.instance.notify();
+      });
+
   // ---------------- Employees ----------------
   static List<Employee> employees() =>
       _read('employees', (j) => Employee.fromJson(j));

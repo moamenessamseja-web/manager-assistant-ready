@@ -17,6 +17,7 @@ class NotificationSettingsScreen extends StatefulWidget {
 class _NotificationSettingsScreenState
     extends State<NotificationSettingsScreen> {
   bool? _permission;
+  bool? _exact;
 
   @override
   void initState() {
@@ -31,7 +32,18 @@ class _NotificationSettingsScreenState
     } catch (_) {
       ok = true;
     }
-    if (mounted) setState(() => _permission = ok);
+    bool exact;
+    try {
+      exact = await NotificationService.exactAlarmsAllowed();
+    } catch (_) {
+      exact = false;
+    }
+    if (mounted) {
+      setState(() {
+        _permission = ok;
+        _exact = exact;
+      });
+    }
   }
 
   Future<void> _toggle(String category, bool v) async {
@@ -72,6 +84,26 @@ class _NotificationSettingsScreenState
                         await _loadPermission();
                       },
                       child: const Text('تفعيل'),
+                    )
+                  : null,
+            ),
+          ),
+          const SizedBox(height: AppSpace.x2),
+          Card(
+            child: ListTile(
+              leading: Icon(_exact == true ? Icons.alarm_on : Icons.alarm_off),
+              title: Text(_exact == null
+                  ? 'جاري فحص المنبهات الدقيقة...'
+                  : (_exact!
+                      ? 'المنبهات الدقيقة مسموحة — التنبيه في ميعاده بالظبط'
+                      : 'المنبهات الدقيقة غير مسموحة — ممكن التنبيه يتأخر دقايق')),
+              trailing: _exact == false
+                  ? TextButton(
+                      onPressed: () async {
+                        await NotificationService.requestExactAlarms();
+                        await _loadPermission();
+                      },
+                      child: const Text('السماح'),
                     )
                   : null,
             ),

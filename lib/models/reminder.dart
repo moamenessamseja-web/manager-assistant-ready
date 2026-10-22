@@ -8,6 +8,7 @@ class Reminder {
   String body;
   DateTime dueAt;
   String recurrence; // none | daily | weekly | monthly
+  int anchor; // للتكرار: يوم الشهر (monthly) أو يوم الأسبوع ١=الإثنين..٧=الأحد (weekly)
   String? relatedEntityId;
   String? relatedEntityType; // commitment | rule | supplier_delivery
   // created -> scheduled -> delivered
@@ -23,6 +24,7 @@ class Reminder {
     required this.body,
     required this.dueAt,
     this.recurrence = 'none',
+    this.anchor = 1,
     this.relatedEntityId,
     this.relatedEntityType,
     this.status = 'created',
@@ -38,6 +40,7 @@ class Reminder {
         'body': body,
         'dueAt': dueAt.toIso8601String(),
         'recurrence': recurrence,
+        'anchor': anchor,
         'relatedEntityId': relatedEntityId,
         'relatedEntityType': relatedEntityType,
         'status': status,
@@ -52,6 +55,7 @@ class Reminder {
         body: j['body'] ?? '',
         dueAt: DateTime.parse(j['dueAt']),
         recurrence: j['recurrence'] ?? 'none',
+        anchor: (j['anchor'] as num?)?.toInt() ?? 1,
         relatedEntityId: j['relatedEntityId'],
         relatedEntityType: j['relatedEntityType'],
         status: j['status'] ?? 'created',

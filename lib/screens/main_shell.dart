@@ -120,7 +120,7 @@ class _MainShellState extends State<MainShell> {
         title = 'الذاكرة';
         break;
       case 3:
-        title = 'بريف الأسبوع';
+        title = 'المستحقات';
         break;
       case 4:
         title = 'الموظفين';

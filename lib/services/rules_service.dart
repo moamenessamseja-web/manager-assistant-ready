@@ -1,38 +1,29 @@
 import 'package:uuid/uuid.dart';
 import '../models/commitment.dart';
+import 'recurrence.dart';
 import 'storage_service.dart';
 import 'reminder_service.dart';
 
-/// يفحص القواعد المتكررة (مثل "كل أول الشهر فكرني بالإيجار")
-/// وينشئ منها التزامات (Commitment) جديدة كل ما يحين موعدها،
-/// ثم يحرّك موعدها القادم تلقائياً.
+/// القواعد المتكررة (مثل "كل أول الشهر فكرني بالإيجار").
+///
+/// **الإشعار** بتاع كل قاعدة بيتجدول مقدّمًا (سلسلة مواعيد قادمة عبر
+/// ReminderService.syncRule) فبيوصل حتى لو التطبيق ما اتفتحش. أما **الالتزام**
+/// (Commitment) اللي بيظهر في «اليوم»/الذاكرة فبيتنشأ عند فتح التطبيق لأي موعد
+/// فات، وبعدين الموعد القادم بيتحرّك.
 class RulesService {
-  static DateTime _advance(DateTime from, String frequency, int anchor) {
-    switch (frequency) {
-      case 'weekly':
-        return from.add(const Duration(days: 7));
-      case 'daily':
-        return from.add(const Duration(days: 1));
-      case 'monthly':
-      default:
-        var y = from.year, m = from.month + 1;
-        if (m > 12) {
-          m = 1;
-          y++;
-        }
-        final lastDay = DateTime(y, m + 1, 0).day;
-        final day = anchor.clamp(1, lastDay);
-        return DateTime(y, m, day, 9, 0);
-    }
-  }
+  /// الموعد التالي (بنفس الساعة والدقيقة) — راجع [Recurrence.advance].
+  static DateTime advance(DateTime from, String frequency, int anchor) =>
+      Recurrence.advance(from, frequency, anchor);
 
-  /// يُستدعى عند فتح التطبيق: يحوّل أي قاعدة مستحقة إلى تذكير فعلي.
-  static Future<int> checkAndTrigger() async {
-    final now = DateTime.now();
+  /// يُستدعى عند فتح التطبيق: يحوّل أي موعد فات لالتزام، ثم يجدّد جدولة
+  /// الإشعارات القادمة لكل قاعدة شغّالة.
+  static Future<int> checkAndTrigger({DateTime? now}) async {
+    final n = now ?? DateTime.now();
     var triggered = 0;
     for (final r in StorageService.rules()) {
       if (!r.active) continue;
-      while (!r.nextDue.isAfter(now)) {
+      var moved = false;
+      while (!r.nextDue.isAfter(n)) {
         final c = Commitment(
           id: const Uuid().v4(),
           textOriginal: r.text,
@@ -44,18 +35,12 @@ class RulesService {
           followUpRule: r.text,
         );
         await StorageService.saveCommitment(c);
-        await ReminderService.createAndSchedule(
-          title: 'قاعدة متكررة',
-          body: r.text,
-          dueAt: r.nextDue,
-          recurrence: r.frequency,
-          relatedEntityId: r.id,
-          relatedEntityType: 'rule',
-        );
-        r.nextDue = _advance(r.nextDue, r.frequency, r.anchor);
+        r.nextDue = advance(r.nextDue, r.frequency, r.anchor);
         triggered++;
+        moved = true;
       }
-      await StorageService.saveRule(r);
+      if (moved) await StorageService.saveRule(r);
+      await ReminderService.syncRule(r);
     }
     return triggered;
   }
