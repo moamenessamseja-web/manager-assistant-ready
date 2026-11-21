@@ -111,3 +111,7 @@ ProGuard rules, re-writing Memory/Weekly Brief — all verified as already worki
   versionName/versionCode/fingerprints were asserted by the workflow's own steps, not re-read by me.
 - **NOT verified:** real release signing with the owner's private key (no secrets exist), installation on a device,
   any UI on a device, Arabic speech on a device, iOS on a device.
+- **iOS (macOS runner, run 44938657368, commit 47cf1b9):** scaffold generated, `NSMicrophoneUsageDescription` and
+  `NSSpeechRecognitionUsageDescription` injected and read back by PlistBuddy, `flutter build ios --release
+  --no-codesign` ✅. This is a **compile check only** — no device, no Arabic speech test, no notifications test,
+  no App Store readiness claim.
