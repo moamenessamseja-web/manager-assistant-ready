@@ -72,14 +72,25 @@ class LocalCommandParser {
         'text_original': text,
         'query_type': queryType
       };
-      if (queryType == 'supplier_balance') {
+      if (queryType == 'customer_payments_period') {
+        final names = _names(w, numbers, const {});
+        if (names.isNotEmpty) f['person'] = names.first;
+        f['period'] = _periodOf(n, w);
+        return CommandResult(
+            intent: 'query_business_data', fields: f, confident: true);
+      }
+      if (queryType == 'supplier_balance' || queryType == 'account_lookup') {
         final names = _names(w, numbers, const {});
         if (names.isNotEmpty) f['person'] = names.first;
         return CommandResult(
           intent: 'query_business_data',
           fields: f,
           confident: names.isNotEmpty,
-          clarification: names.isEmpty ? '❓ محتاج اسم المورد.' : null,
+          clarification: names.isEmpty
+              ? (queryType == 'account_lookup'
+                  ? '❓ حساب مين؟ قولّي الاسم.'
+                  : '❓ محتاج اسم المورد.')
+              : null,
         );
       }
       return CommandResult(
@@ -108,12 +119,17 @@ class LocalCommandParser {
     // اللي اتستهلكت كتاريخ/ساعة ما تتحسبش مبلغ ولا اسم أبدًا.
     final wantTime = intent == 'supplier_delivery' ||
         intent == 'create_commitment' ||
+        intent == 'customer_promise' ||
         intent == 'add_rule';
-    final dt = _dateTimeOf(n, w, numbers, wantTime: wantTime);
+    final isCustEntry =
+        intent == 'customer_charge' || intent == 'customer_payment';
+    final dt =
+        _dateTimeOf(n, w, numbers, wantTime: wantTime, pastBias: isCustEntry);
     usedIndices.addAll(dt.used);
     // اسم الصنف (الكلمة بعد «كمية + وحدة») — ما يتحوّلش لشخص.
     final itemIdx = (qu != null &&
             (intent == 'record_purchase' ||
+                intent == 'customer_charge' ||
                 intent == 'supplier_delivery' ||
                 intent == 'mark_delivery_received'))
         ? _itemIndex(w, qu)
@@ -144,11 +160,39 @@ class LocalCommandParser {
     // الوظيفة (لتمييز «أحمد سواق» عن «أحمد طباخ»)
     final role = _roleIn(w);
     if (role != null) f['person_role'] = role;
-    if (dt.date != null) f['due_date'] = dt.date;
+    if (dt.date != null) f[isCustEntry ? 'entry_date' : 'due_date'] = dt.date;
     if (dt.time != null) f['time'] = dt.time;
     if (dt.hourRaw != null) f['time_hour_raw'] = dt.hourRaw;
 
     switch (intent) {
+      case 'add_customer':
+        if (names.isNotEmpty) f['customer_name'] = names.first;
+        if (amount != null) {
+          f['opening_balance'] = amount;
+          final dir = _balanceDirection(n, w);
+          if (dir != null) f['opening_direction'] = dir;
+        }
+        break;
+
+      case 'customer_charge':
+        f['amount'] = amount;
+        if (qu != null) {
+          f['sale_quantity'] = qu.quantity;
+          if (qu.unit.isNotEmpty) f['sale_unit'] = qu.unit;
+          if (itemIdx != null) f['sale_item'] = w[itemIdx];
+        }
+        if (w.contains('طلبات') || w.contains('طلب')) f['sale_item'] = 'طلبات';
+        break;
+
+      case 'customer_payment':
+        f['amount'] = amount;
+        break;
+
+      case 'customer_promise':
+        if (amount != null) f['amount'] = amount;
+        f['type'] = 'customer_promise';
+        break;
+
       case 'mark_attendance':
         break;
 
@@ -219,6 +263,7 @@ class LocalCommandParser {
 
   static String? _detectQuery(String n, List<String> w) {
     bool c(String s) => n.contains(s);
+    bool t0(String s) => w.contains(s);
     if (c('محضرش') ||
         c('مش حاضر') ||
         c('مش حضر') ||
@@ -232,13 +277,26 @@ class LocalCommandParser {
         c('عليهم فلوس') ||
         c('مديون') ||
         c('مين عليه') ||
-        c('مين عليهم')) {
+        c('مين عليهم') ||
+        c('العملاء المدينين') ||
+        t0('المستحقات')) {
       return 'debtors';
     }
-    if (c('كام للمورد') ||
-        c('رصيد') ||
-        (c('حساب') && (c('مورد') || c('للمورد')))) {
+    bool t(String x) => w.contains(x);
+    // عملاء: «مين دفع؟» / «جمال دفع كام الأسبوع ده؟»
+    final payVerb = t('دفع') || t('سدد') || t('دفعوا') || t('سددوا');
+    if (payVerb && (t('كام') || t('مين')) && !t('سلف') && !t('سلفه')) {
+      return 'customer_payments_period';
+    }
+    // مورد صريح → حساب المورد (السلوك القديم كما هو).
+    if (c('كام للمورد') || (c('مورد') && (c('رصيد') || c('حساب')))) {
       return 'supplier_balance';
+    }
+    // «حساب جمال كام؟» / «وريني حساب حموده» / «رصيد جمال» — من غير كلمة مورد:
+    // العميل أو المورد بيتحدد بالاسم عند التنفيذ (من غير تخمين).
+    final cue = t('كام') || t('وريني') || t('ورني') || t('عرض') || t('شوف');
+    if (t('كشف') || t('رصيد') || (t('حساب') && cue)) {
+      return 'account_lookup';
     }
     if (w.contains('سلف') &&
         (c('الاسبوع') ||
@@ -254,6 +312,48 @@ class LocalCommandParser {
   static String _detectIntent(String n, List<String> w) {
     bool t(String s) => w.contains(s);
     bool c(String s) => n.contains(s);
+
+    // ── عملاء (المستحقات) — بصيغة الغائب/الإضافة «على فلان»؛ «دفعت» بصيغة
+    // المتكلم تفضل دفع لمورد زي ما هي. الوعد بالدفع ≠ دفعة فعلية.
+    final empWord = t('سلفه') || t('سلف') || t('مكافاه') || t('مكافات');
+    if (t('هيدفع') ||
+        t('هتدفع') ||
+        t('هيسدد') ||
+        t('هتسدد') ||
+        ((t('وعدني') || t('وعد')) && (t('يدفع') || t('يسدد')))) {
+      return 'customer_promise';
+    }
+    final custWord = t('عميل') || t('زبون') || t('عملاء');
+    if (custWord &&
+        (t('جديد') || t('سجل') || t('اضف') || t('ضيف') || t('اضافه'))) {
+      return 'add_customer';
+    }
+    var addOn = false;
+    for (var i = 0; i + 1 < w.length; i++) {
+      if ((w[i] == 'ضيف' || w[i] == 'زود' || w[i] == 'اضف' || w[i] == 'حط') &&
+          w[i + 1] == 'علي') {
+        addOn = true;
+      }
+    }
+    if (!empWord &&
+        (addOn ||
+            (t('سجل') && t('طلبات') && t('علي')) ||
+            ((t('بعت') || t('بيع')) && (t('اجل') || t('بالاجل'))))) {
+      return 'customer_charge';
+    }
+    if (!empWord &&
+        (t('دفع') ||
+            t('سدد') ||
+            t('سداد') ||
+            t('دفعوا') ||
+            t('سددوا') ||
+            t('حصلت') ||
+            t('قبضت') ||
+            c('خصم من دين') ||
+            c('خصم من حساب') ||
+            c('خصم من مديونيه'))) {
+      return 'customer_payment';
+    }
 
     // دفع لمورد
     if (t('دفعت') ||
@@ -561,7 +661,7 @@ class LocalCommandParser {
   /// أسماء حقيقية بتبدأ بواو — ما تتفصلش منها الواو كأنها عطف.
   static const Set<String> _waNames = {
     'وليد', 'وائل', 'وسيم', 'وحيد', 'وجدي', 'وفاء', 'وردة', 'ورده', 'وسام',
-    'وديع', 'وجيه', 'وهبه', 'وهبي',
+    'وديع', 'وجيه', 'وهبه', 'وهبي', 'وعدني', 'وعدت', 'وعدنا',
   };
 
   /// كلمات التاريخ/الساعة/التوريد المتوقع — مش أسماء أشخاص.
@@ -595,7 +695,7 @@ class LocalCommandParser {
   /// يستخرج اليوم والساعة بدون أي افتراض. لو الساعة من غير تحديد صباح/مساء
   /// بنرجّع [hourRaw] ونسأل، بدل ما نخمّن.
   static _DT _dateTimeOf(String n, List<String> w, List<_Num> nums,
-      {bool wantTime = true, int? hourHint}) {
+      {bool wantTime = true, int? hourHint, bool pastBias = false}) {
     final r = _DT();
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
@@ -604,7 +704,18 @@ class LocalCommandParser {
         '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
     DateTime? day;
-    if (n.contains('بعد بكره')) {
+    // مبيعات/دفعات العملاء بتحصل في الماضي أو النهارده: «امبارح» و«٢٠ نوفمبر»
+    // بيتفسّروا لأقرب تاريخ فات (مش السنة الجاية).
+    if (pastBias) {
+      if (n.contains('اول امس') || n.contains('اول امبارح')) {
+        day = addDays(-2);
+      } else if (w.contains('امبارح') || w.contains('امس')) {
+        day = addDays(-1);
+      }
+    }
+    if (day != null) {
+      // اتحدد بالفعل (امبارح/أول امبارح)
+    } else if (n.contains('بعد بكره')) {
       day = addDays(2);
     } else if (w.contains('بكره') || w.contains('غدا')) {
       day = addDays(1);
@@ -636,7 +747,11 @@ class LocalCommandParser {
         final m = _months[after];
         if (m != null && _isInt(x.value) && x.value >= 1 && x.value <= 31) {
           var cand = DateTime(today.year, m, x.value.toInt());
-          if (cand.isBefore(today)) cand = DateTime(today.year + 1, m, x.value.toInt());
+          if (pastBias) {
+            if (cand.isAfter(today)) cand = DateTime(today.year - 1, m, x.value.toInt());
+          } else if (cand.isBefore(today)) {
+            cand = DateTime(today.year + 1, m, x.value.toInt());
+          }
           day = cand;
           r.used.addAll([x.start, x.end]);
           break;
@@ -651,7 +766,11 @@ class LocalCommandParser {
         final mm = int.parse(m.group(2)!);
         if (mm < 1 || mm > 12 || dd < 1 || dd > 31) continue;
         var cand = DateTime(today.year, mm, dd);
-        if (cand.isBefore(today)) cand = DateTime(today.year + 1, mm, dd);
+        if (pastBias) {
+          if (cand.isAfter(today)) cand = DateTime(today.year - 1, mm, dd);
+        } else if (cand.isBefore(today)) {
+          cand = DateTime(today.year + 1, mm, dd);
+        }
         day = cand;
         r.used.add(i);
         break;
@@ -661,9 +780,13 @@ class LocalCommandParser {
       for (final t in w) {
         final wd = _weekdays[t];
         if (wd == null) continue;
-        var diff = (wd - today.weekday + 7) % 7;
-        if (diff == 0) diff = 7;
-        day = addDays(diff);
+        if (pastBias) {
+          day = addDays(-((today.weekday - wd + 7) % 7));
+        } else {
+          var diff = (wd - today.weekday + 7) % 7;
+          if (diff == 0) diff = 7;
+          day = addDays(diff);
+        }
         break;
       }
     }
@@ -774,6 +897,15 @@ class LocalCommandParser {
         rest.first.value <= 12) {
       f['time_hour_raw'] = rest.first.value.toInt();
     }
+    if (expect.contains('confirm_overpay') &&
+        RegExp(r'(^| )(ايوه|اه|اكيد|تمام|ماشي|نعم|اوكي|سجلها|اكد|اكدها)( |$)')
+            .hasMatch(n)) {
+      f['confirm_overpay'] = true;
+    }
+    if (expect.contains('opening_direction')) {
+      final d = _balanceDirection(n, w);
+      if (d != null) f['opening_direction'] = d;
+    }
     if (expect.contains('amount') && rest.isNotEmpty) {
       final a = _pickAmount(n, w, rest);
       if (a != null) f['amount'] = a;
@@ -786,6 +918,23 @@ class LocalCommandParser {
       }
     }
     return f;
+  }
+
+  /// اتجاه الرصيد السابق: 'owes' (العميل مدين لنا) / 'credit' (ليه فلوس عندنا)
+  /// / null لو مش مذكور أو متعارض (يبقى لازم نسأل — مفيش تخمين).
+  static String? _balanceDirection(String n, List<String> w) {
+    final owes = w.contains('عليه') || w.contains('عليها') || n.contains('مديون');
+    final credit = w.contains('له') || w.contains('ليه') || n.contains('دايم');
+    if (owes == credit) return null;
+    return owes ? 'owes' : 'credit';
+  }
+
+  /// فترة الاستعلام: 'today' / 'week' / 'month' / 'all'.
+  static String _periodOf(String n, List<String> w) {
+    if (n.contains('اسبوع')) return 'week';
+    if (n.contains('شهر')) return 'month';
+    if (w.contains('النهارده') || w.contains('اليوم')) return 'today';
+    return 'all';
   }
 
   static String _ruleFrequency(String n) {
@@ -843,6 +992,13 @@ class LocalCommandParser {
         return hasName && _amt(f) > 0;
       case 'add_employee':
         return hasName;
+      case 'add_customer':
+        return hasName;
+      case 'customer_charge':
+      case 'customer_payment':
+        return hasName && _amt(f) > 0;
+      case 'customer_promise':
+        return hasName && f['due_date'] != null && f['time'] != null;
       case 'create_commitment':
         // لازم يوم + ساعة صريحين — مفيش افتراض «بكرة» ولا ساعة من عندنا.
         return f['due_date'] != null && f['time'] != null;
@@ -871,6 +1027,13 @@ class LocalCommandParser {
             : ' (${f['purchase_quantity']} ${f['purchase_unit'] ?? ''} ${f['purchase_item'] ?? ''})'
                 .replaceAll(RegExp(r'\s+'), ' ');
         return '❓ كام إجمالي قيمة التوريد من $who$q؟ (أو سعر الوحدة)';
+      case 'add_customer':
+        return '❓ محتاج اسم العميل.';
+      case 'customer_charge':
+        return '❓ محتاج اسم العميل والمبلغ اللي هيتضاف عليه.';
+      case 'customer_payment':
+        return '❓ محتاج اسم العميل والمبلغ اللي دفعه.';
+      case 'customer_promise':
       case 'supplier_delivery':
       case 'create_commitment':
         return null; // المتحكّم بيسأل عن الناقص بالظبط (اسم/يوم/ساعة).
@@ -1171,6 +1334,53 @@ class LocalCommandParser {
     'اخده',
     'واخد',
     'ادفع',
+    'زود',
+    'حط',
+    'طلبات',
+    'طلب',
+    'بتاريخ',
+    'تاريخ',
+    'سدد',
+    'سداد',
+    'سددوا',
+    'دفعوا',
+    'هيدفع',
+    'هتدفع',
+    'هيسدد',
+    'هتسدد',
+    'وعدني',
+    'وعد',
+    'يدفع',
+    'يسدد',
+    'حسابها',
+    'الحساب',
+    'دينه',
+    'باقي',
+    'عميل',
+    'عملاء',
+    'زبون',
+    'العميل',
+    'الزبون',
+    'حصلت',
+    'قبضت',
+    'بعت',
+    'بيع',
+    'اجل',
+    'بالاجل',
+    'عليها',
+    'له',
+    'ليه',
+    'كشف',
+    'وريني',
+    'ورني',
+    'افتكر',
+    'مديونيه',
+    'مديون',
+    'المستحقات',
+    'العملاء',
+    'عرض',
+    'شوف',
+    'وعده',
   };
 }
 

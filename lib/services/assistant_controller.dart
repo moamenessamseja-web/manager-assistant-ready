@@ -1,5 +1,6 @@
 import 'package:uuid/uuid.dart';
 import '../models/commitment.dart';
+import '../models/customer.dart';
 import '../models/employee.dart';
 import '../models/supplier.dart';
 import '../models/rule.dart';
@@ -32,6 +33,13 @@ class AssistantController {
   static String? _lastKey;
   static DateTime? _lastAt;
   static String _lastReply = '';
+
+  /// للاختبارات فقط: يصفّر حارس «نفس الأمر خلال ٨ ثواني» (حالة في الذاكرة).
+  static void resetGuardForTest() {
+    _lastKey = null;
+    _lastAt = null;
+    _lastReply = '';
+  }
 
   static Future<String> handle(String text, {String? messageId}) async {
     // (أ) منع تكرار دائم: نفس معرّف الرسالة اتنفّذ قبل كده (حتى لو التطبيق اتقفل
@@ -94,6 +102,18 @@ class AssistantController {
   ) async {
     fields = Map<String, dynamic>.from(fields);
     final intent = fields['intent'] as String;
+
+    if (_customerIntents.contains(intent)) {
+      // معرّف ثابت للعملية: بيتحفظ مع العملية المعلّقة، وبيبقى معرّف السجل
+      // نفسه — فأي تنفيذ مكرر (حتى بعد إعادة تشغيل التطبيق) يترفض على مستوى السجل.
+      fields['op_id'] ??= const Uuid().v4();
+      fields['party'] = 'customer';
+      final many = (fields['people'] as List? ?? const []).length > 1;
+      if (many) {
+        return '⚠️ لقيت أكتر من اسم في الأمر. اكتب كل عميل في أمر لوحده '
+            'عشان الحسابات ما تتلخبطش.';
+      }
+    }
 
     // عدة أشخاص (بمعرّفات محفوظة أو بأسماء) — يُنفَّذ على كل سجل ثم تُجمَع النتائج.
     final ids = <String>[
@@ -208,6 +228,26 @@ class AssistantController {
           if (!hasName) 'person',
           if (!hasAmount) 'amount',
         ];
+      case 'add_customer':
+        final hasCust = hasName ||
+            (f['customer_name'] as String?)?.isNotEmpty == true;
+        return [
+          if (!hasCust) 'person',
+          if (((f['opening_balance'] as num?)?.toDouble() ?? 0) > 0 &&
+              !_hasVal(f['opening_direction']))
+            'opening_direction',
+        ];
+      case 'customer_charge':
+      case 'customer_payment':
+        return [
+          if (!hasName) 'person',
+          if (!hasAmount) 'amount',
+        ];
+      case 'customer_promise':
+        return [
+          if (!hasName) 'person',
+          ..._whenMissing(f),
+        ];
       case 'add_employee':
         return [
           if ((f['employee_name'] as String?)?.isEmpty != false)
@@ -258,7 +298,18 @@ class AssistantController {
           ? 'الساعة ${f!['time_hour_raw']} صباحًا ولا مساءً'
           : 'الساعة كام');
     }
-    if (missing.contains('person')) parts.add('اسم الموظف/المورد');
+    final isCust = f?['party'] == 'customer';
+    if (missing.contains('opening_direction')) {
+      return '❓ الرصيد ده عليه فلوس (مدين لنا) ولا له فلوس عندنا؟';
+    }
+    if (missing.contains('confirm_overpay')) {
+      final due = (f?['balance_due'] as num?)?.toDouble() ?? 0;
+      return '⚠️ المبلغ أكبر من المتبقي على العميل (${_m(due)} ج). '
+          'لو فعلًا دفع زيادة وعايز تسجّلها كرصيد له، أكّد.';
+    }
+    if (missing.contains('person')) {
+      parts.add(isCust ? 'اسم العميل' : 'اسم الموظف/المورد');
+    }
     if (missing.contains('employee_name')) parts.add('اسم الموظف');
     if (missing.contains('amount')) parts.add('المبلغ');
     if (missing.contains('salary')) parts.add('المرتب الشهري');
@@ -360,9 +411,19 @@ class AssistantController {
     }
 
     final parsed = LocalCommandParser.parse(text);
+    final earlySlots = LocalCommandParser.extractSlots(text,
+        expect: p.missing.toSet(),
+        hourHint: (p.fields['time_hour_raw'] as num?)?.toInt());
+    // رد على سؤال اتجاه الرصيد/تأكيد الزيادة («عليه فلوس» ممكن تتفهم كاستعلام
+    // «مين عليه فلوس؟») — الإجابة المتوقعة بتتقدّم على اعتباره أمر جديد.
+    final answeredSlot = earlySlots.containsKey('opening_direction') ||
+        earlySlots.containsKey('confirm_overpay');
 
     // أمر جديد واضح ومختلف تمامًا → نلغي المعلّق ونسيب المسار العادي يكمّل.
-    if (parsed.isKnown && parsed.confident && parsed.intent != p.intent) {
+    if (!answeredSlot &&
+        parsed.isKnown &&
+        parsed.confident &&
+        parsed.intent != p.intent) {
       await ConversationContextService.clearPending();
       return null;
     }
@@ -370,9 +431,7 @@ class AssistantController {
     final merged = Map<String, dynamic>.from(p.fields);
     // رد قصير («٣٠٠» / «بكرة الساعة ٥ العصر» / «مساء») مش أمر كامل، فبنستخرج
     // منه الخانات الناقصة مباشرة.
-    final slots = LocalCommandParser.extractSlots(text,
-        expect: p.missing.toSet(),
-        hourHint: (p.fields['time_hour_raw'] as num?)?.toInt());
+    final slots = earlySlots;
     for (final e in slots.entries) {
       if (e.key == 'time_hour_raw' && _hasVal(merged['time'])) continue;
       if (!_hasVal(merged[e.key]) || p.missing.contains(e.key)) {
@@ -380,7 +439,7 @@ class AssistantController {
       }
     }
     if (_hasVal(merged['time'])) merged.remove('time_hour_raw');
-    for (final e in parsed.fields.entries) {
+    for (final e in (answeredSlot ? const <String, dynamic>{} : parsed.fields).entries) {
       if (e.key == 'text_original' || e.key == 'intent') continue;
       if (!_hasVal(merged[e.key]) || p.missing.contains(e.key))
         merged[e.key] = e.value;
@@ -415,11 +474,23 @@ class AssistantController {
         if (i >= 0 && i < options.length) return options[i];
       }
     }
-    // اختيار بالاسم/الوظيفة
-    for (final o in options) {
-      final first = LocalCommandParser.normalize(o.name).split(' ').first;
-      if (first.isNotEmpty && n.contains(first)) return o;
+    // اختيار بالاسم: الاسم الكامل الأول (عشان «محمد حسن» ما يتحسبش «محمد علي»)،
+    // وبعدين الاسم الأول بس لو بيطابق خيار واحد بالظبط — غير كده مفيش تخمين.
+    final full = options
+        .where((o) => LocalCommandParser.normalize(o.name).isNotEmpty &&
+            n.contains(LocalCommandParser.normalize(o.name)))
+        .toList();
+    if (full.length == 1) return full.first;
+    if (full.length > 1) {
+      full.sort((a, b) => b.name.length.compareTo(a.name.length));
+      if (full.first.name.length > full[1].name.length) return full.first;
+      return null;
     }
+    final byFirst = options.where((o) {
+      final first = LocalCommandParser.normalize(o.name).split(' ').first;
+      return first.isNotEmpty && n.contains(first);
+    }).toList();
+    if (byFirst.length == 1) return byFirst.first;
     return null;
   }
 
@@ -435,6 +506,20 @@ class AssistantController {
     'supplier_delivery',
   };
 
+  /// عمليات العملاء (المستحقات). مفيش «عدة أشخاص» فيها: كل عميل في أمر لوحده.
+  static const Set<String> _customerIntents = {
+    'add_customer',
+    'customer_charge',
+    'customer_payment',
+    'customer_promise',
+  };
+
+  static const Set<String> _customerEntityIntents = {
+    'customer_charge',
+    'customer_payment',
+    'customer_promise',
+  };
+
   static const Set<String> _supplierIntents = {
     'record_purchase',
     'add_supplier_payment',
@@ -447,7 +532,10 @@ class AssistantController {
   /// بدل تنفيذ العملية على سجل عشوائي.
   static Future<String?> _ambiguityFor(
       String intent, Map<String, dynamic> f) async {
-    if (!_personIntents.contains(intent)) return null;
+    if (!_personIntents.contains(intent) &&
+        !_customerEntityIntents.contains(intent)) {
+      return null;
+    }
     if ((f['person_id'] as String?)?.isNotEmpty == true) return null;
     final name = (f['person'] as String? ?? '').trim();
     if (name.isEmpty) return null;
@@ -457,7 +545,15 @@ class AssistantController {
     String? ambMsg;
     List<ContextPerson> options = const [];
 
-    if (isSupplier) {
+    if (_customerEntityIntents.contains(intent)) {
+      final matches = StorageService.customersMatching(name);
+      if (matches.length > 1) {
+        options =
+            matches.map((c) => ContextPerson(id: c.id, name: c.name)).toList();
+        ambMsg = '🤔 عندي أكتر من عميل بالاسم ده: '
+            '${matches.map((c) => c.name).join(' / ')}. قولّي مين بالظبط؟';
+      }
+    } else if (isSupplier) {
       final matches = StorageService.suppliersMatching(name);
       if (matches.length > 1) {
         options =
@@ -542,6 +638,14 @@ class AssistantController {
         return _queryBusinessData(d);
       case 'create_commitment':
         return _createCommitment(d, text);
+      case 'add_customer':
+        return _addCustomer(d);
+      case 'customer_charge':
+        return _customerEntry(d, text, isPayment: false);
+      case 'customer_payment':
+        return _customerEntry(d, text, isPayment: true);
+      case 'customer_promise':
+        return _customerPromise(d, text);
       default:
         return 'لم أفهم العملية المطلوبة بوضوح. جرب تصيغها بشكل تاني.';
     }
@@ -591,6 +695,212 @@ class AssistantController {
           null, '🤔 عندي أكتر من مورد بنفس الاسم: $opts. وضّح مين بالظبط؟');
     }
     return _Resolved(matches.first, null);
+  }
+
+
+  // ---------------- Customers (المستحقات) ----------------
+
+  /// رقم بدون كسور لو صحيح، وإلا رقمين عشريين — من غير تقريب مخفي.
+  static String _m(double v) =>
+      v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toStringAsFixed(2);
+
+  static _Resolved<Customer> _resolveCustomer(String name, [String? id]) {
+    if (id != null && id.isNotEmpty) {
+      final byId = StorageService.customers().where((c) => c.id == id).toList();
+      if (byId.length == 1) return _Resolved(byId.first, null);
+    }
+    if (name.trim().isEmpty) {
+      return const _Resolved(null, '❓ محتاج اسم العميل.');
+    }
+    final matches = StorageService.customersMatching(name);
+    if (matches.isEmpty) {
+      final arch = StorageService.customersMatching(name, includeArchived: true);
+      if (arch.isNotEmpty) {
+        return _Resolved(null,
+            '🗄️ العميل ${arch.first.name} مؤرشف. ألغِ أرشفته الأول لو عايز تسجّل عليه عملية جديدة.');
+      }
+      final isSupplier = StorageService.suppliersMatching(name).isNotEmpty;
+      return _Resolved(
+          null,
+          '❓ مفيش عميل باسم $name. لو عايز تضيفه قول: "عميل جديد $name".'
+          '${isSupplier ? ' (ملاحظة: $name مسجّل عندك كمورد؛ لو تقصد دفعة لمورد قول: "دفعت ل$name ...")' : ''}');
+    }
+    if (matches.length > 1) {
+      return _Resolved(null,
+          '🤔 عندي أكتر من عميل بنفس الاسم: ${matches.map((c) => c.name).join(' / ')}. وضّح مين بالظبط؟');
+    }
+    return _Resolved(matches.first, null);
+  }
+
+  /// تاريخ الحركة: النهارده (بالوقت الحالي) أو يوم فات (الساعة ١٢ ظهرًا).
+  /// null = تاريخ في المستقبل (مرفوض: مبيعات/دفعات العملاء بتتسجل بعد ما تحصل).
+  static DateTime? _entryDate(Map<String, dynamic> d) {
+    final now = DateTime.now();
+    final raw = (d['entry_date'] ?? '').toString();
+    if (raw.length < 10) return now;
+    final day = DateTime.tryParse(raw.substring(0, 10));
+    if (day == null) return now;
+    final today = DateTime(now.year, now.month, now.day);
+    if (day.isAfter(today)) return null;
+    if (day == today) return now;
+    return DateTime(day.year, day.month, day.day, 12);
+  }
+
+  static Future<String> _addCustomer(Map<String, dynamic> d) async {
+    final name =
+        (d['customer_name'] ?? d['person'] ?? '').toString().trim();
+    if (name.isEmpty) return '❓ محتاج اسم العميل.';
+    final norm = normalizeArabic(name);
+    final exact = StorageService.customers()
+        .where((c) => normalizeArabic(c.name) == norm)
+        .toList();
+    if (exact.isNotEmpty) {
+      return 'ℹ️ فيه عميل مسجّل بالفعل باسم ${exact.first.name}. '
+          'مش هكرر السجل — تقدر تسجّل عليه عمليات مباشرة.';
+    }
+    final opId = (d['op_id'] ?? const Uuid().v4()).toString();
+    final opening = (d['opening_balance'] as num?)?.toDouble() ?? 0;
+    final dir = (d['opening_direction'] ?? '').toString();
+    if (opening > 0 && dir != 'owes' && dir != 'credit') {
+      return _askFor(['opening_direction'], d);
+    }
+    final now = DateTime.now();
+    final c = Customer(id: 'cust_$opId', name: name);
+    if (opening > 0 && dir == 'owes') {
+      c.addSale(CreditSale(
+          id: 'open_$opId',
+          item: 'رصيد سابق',
+          total: opening,
+          date: now,
+          note: 'رصيد سابق عند إضافة العميل',
+          opening: true));
+    } else if (opening > 0 && dir == 'credit') {
+      c.addPayment(CustomerPayment(
+          id: 'open_$opId',
+          amount: opening,
+          date: now,
+          note: 'رصيد افتتاحي لصالح العميل',
+          opening: true));
+    }
+    await StorageService.saveCustomer(c);
+    final bal = c.balanceDue;
+    final balTxt = bal > 0.005
+        ? 'رصيده: عليه ${_m(bal)} ج'
+        : bal < -0.005
+            ? 'رصيده: له ${_m(-bal)} ج عندنا'
+            : 'رصيده صفر';
+    return '✅ سجلت العميل ${c.name}. $balTxt.';
+  }
+
+  /// بيع آجل / زيادة (يزوّد المستحق) أو دفعة (تقلّله) — حركة مستقلة لكل أمر.
+  static Future<String> _customerEntry(Map<String, dynamic> d, String text,
+      {required bool isPayment}) async {
+    final r = _resolveCustomer(
+        (d['person'] ?? '').toString(), d['person_id'] as String?);
+    if (!r.ok) return r.message!;
+    final amount = (d['amount'] as num?)?.toDouble() ?? 0;
+    if (amount <= 0) return '❓ محتاج المبلغ.';
+    final when = _entryDate(d);
+    if (when == null) {
+      return '⚠️ التاريخ ده لسه ما جاش. ${isPayment ? 'الدفعات' : 'المبيعات الآجلة'} '
+          'بتتسجل بتاريخ النهارده أو قبله. لو قصدك تفكّره بميعاد قول: "فكرني ${r.value!.name} هيدفع ...".';
+    }
+    final cust = r.value!;
+
+    // دفعة أكبر من المتبقي = غالبًا غلطة رقم: نطلب تأكيد صريح قبل التسجيل.
+    if (isPayment &&
+        d['confirm_overpay'] != true &&
+        amount > cust.balanceDue + 0.005) {
+      await ConversationContextService.setPending(PendingOperation(
+        intent: 'customer_payment',
+        fields: Map<String, dynamic>.from(d)
+          ..remove('intent')
+          ..['person_id'] = cust.id
+          ..['person'] = cust.name
+          ..['balance_due'] = cust.balanceDue,
+        missing: const ['confirm_overpay'],
+        createdAt: DateTime.now(),
+      ));
+      return _askFor(['confirm_overpay'], {'balance_due': cust.balanceDue});
+    }
+
+    final opId = (d['op_id'] ?? const Uuid().v4()).toString();
+    final note = (d['text_original'] ?? text).toString();
+    var applied = false;
+    await StorageService.mutateCustomer(cust.id, (x) {
+      if (isPayment) {
+        applied = x.addPayment(CustomerPayment(
+            id: 'pay_$opId', amount: amount, date: when, note: note));
+      } else {
+        final qty = (d['sale_quantity'] as num?)?.toDouble();
+        applied = x.addSale(CreditSale(
+            id: 'sale_$opId',
+            item: (d['sale_item'] ?? '').toString(),
+            quantity: qty,
+            unit: (d['sale_unit'] ?? '').toString(),
+            total: amount,
+            date: when,
+            note: note));
+      }
+      return applied;
+    });
+    if (!applied) {
+      return 'ℹ️ العملية دي اتسجلت قبل كده، فمش هكررها.';
+    }
+    final after = StorageService.customers().firstWhere((c) => c.id == cust.id);
+    final bal = after.balanceDue;
+    final balTxt = bal > 0.005
+        ? 'المتبقي عليه ${_m(bal)} ج'
+        : bal < -0.005
+            ? 'بقى له ${_m(-bal)} ج رصيد عندنا'
+            : 'حسابه اتسوّى (صفر)';
+    final dateTxt = when.difference(DateTime.now()).inHours.abs() < 12
+        ? ''
+        : ' بتاريخ ${arabicDate(when)}';
+    return isPayment
+        ? '✅ سجلت دفعة ${_m(amount)} ج من ${after.name}$dateTxt. $balTxt.'
+        : '✅ سجلت ${_m(amount)} ج على ${after.name}$dateTxt. $balTxt.';
+  }
+
+  /// وعد بالدفع = التزام + تذكير. **ما بيغيّرش رصيد العميل أبدًا**؛ الرصيد
+  /// بيتغيّر بس لما تتسجل دفعة فعلية («جمال دفع ...»).
+  static Future<String> _customerPromise(
+      Map<String, dynamic> d, String text) async {
+    final r = _resolveCustomer(
+        (d['person'] ?? '').toString(), d['person_id'] as String?);
+    if (!r.ok) return r.message!;
+    final due = _dueFrom(d);
+    if (due == null) return '❓ محتاج اليوم والساعة بالظبط عشان أضبط التذكير.';
+    final cust = r.value!;
+    final opId = (d['op_id'] ?? const Uuid().v4()).toString();
+    final cid = 'promise_$opId';
+    if (StorageService.commitments().any((x) => x.id == cid)) {
+      return 'ℹ️ الوعد ده اتسجل قبل كده، فمش هكرره.';
+    }
+    final amount = (d['amount'] as num?)?.toDouble();
+    final c = Commitment(
+      id: cid,
+      textOriginal: (d['text_original'] ?? text).toString(),
+      person: cust.name,
+      type: 'customer_promise',
+      amount: amount,
+      dueDate: due,
+      remindAt: due,
+      customerId: cust.id,
+    );
+    await StorageService.saveCommitment(c);
+    final outcome = await ReminderService.createAndSchedule(
+      title: 'وعد دفع: ${cust.name}',
+      body: c.textOriginal,
+      dueAt: c.remindAt,
+      relatedEntityId: c.id,
+      relatedEntityType: 'commitment',
+    );
+    final bal = cust.balanceDue;
+    return '✅ سجلت وعد ${cust.name} بالدفع'
+        '${amount == null ? '' : ' (${_m(amount)} ج)'}، والتذكير ${arabicDateTime(c.remindAt)}. '
+        'ده وعد بس — حسابه لسه ${bal > 0.005 ? 'عليه ${_m(bal)} ج' : 'زي ما هو'} '
+        'لحد ما تسجّل دفعة فعلية.${outcome.warningSuffix}';
   }
 
   // ---------------- Employees ----------------
@@ -937,16 +1247,43 @@ class AssistantController {
     switch (type) {
       case 'debtors':
       case 'who_owes':
-        final debts = StorageService.commitments()
+        // المصدر الأساسي: حسابات العملاء (المستحقات). الالتزامات القديمة من نوع
+        // «دين للتحصيل» بتتعرض لوحدها وما بتتجمعش معاهم (مفيش عدّ مزدوج).
+        final owing = StorageService.customers().where((c) => c.owes).toList()
+          ..sort((a, b) => b.balanceDue.compareTo(a.balanceDue));
+        final legacy = StorageService.commitments()
             .where((c) =>
                 c.status == 'pending' &&
                 c.type == 'debt_to_collect' &&
                 (c.amount ?? 0) > 0)
             .toList();
-        if (debts.isEmpty) return 'مفيش حد عليه فلوس مسجل دلوقتي. 🎉';
-        final lines = debts.map((c) =>
-            '• ${c.person}: ${c.amount!.toStringAsFixed(0)} ج (${arabicDate(c.dueDate)})');
-        return 'اللي عليهم فلوس:\n${lines.join('\n')}';
+        if (owing.isEmpty && legacy.isEmpty) {
+          return 'مفيش حد عليه فلوس مسجل دلوقتي. 🎉';
+        }
+        final out = StringBuffer();
+        if (owing.isNotEmpty) {
+          out.writeln('اللي عليهم فلوس (حسابات العملاء):');
+          for (final c in owing) {
+            out.writeln('• ${c.name}: ${_m(c.balanceDue)} ج');
+          }
+          out.write('الإجمالي: ${_m(totalReceivables(StorageService.customers()))} ج');
+        }
+        if (legacy.isNotEmpty) {
+          if (out.isNotEmpty) out.writeln('\n');
+          out.writeln('التزامات تحصيل مسجّلة بشكل منفصل (مش داخلة في الإجمالي فوق):');
+          out.write(legacy
+              .map((c) =>
+                  '• ${c.person}: ${_m(c.amount!)} ج (${arabicDate(c.dueDate)})')
+              .join('\n'));
+        }
+        return out.toString().trimRight();
+
+      case 'account_lookup':
+        return _accountLookup((d['person'] ?? '').toString());
+
+      case 'customer_payments_period':
+        return _customerPaymentsPeriod(
+            (d['person'] ?? '').toString(), (d['period'] ?? 'all').toString());
 
       case 'absent_today':
         final emps =
@@ -991,5 +1328,110 @@ class AssistantController {
       default:
         return 'تقدر تسأل: "مين عليه فلوس؟" أو "مين ما حضرش النهارده؟" أو "كام للمورد [الاسم]؟" أو "مين أخد سلف الأسبوع ده؟"';
     }
+  }
+
+  /// «حساب جمال كام؟»: عميل و/أو مورد بالاسم — من غير تخمين لو الاتنين موجودين
+  /// (بنعرض الحسابين بعنوان واضح لكل واحد) ولا لو الاسم ملتبس (بنسأل).
+  static String _accountLookup(String name) {
+    final custs = StorageService.customersMatching(name, includeArchived: true);
+    final sups = StorageService.suppliersMatching(name, includeArchived: true);
+    if (custs.isEmpty && sups.isEmpty) {
+      return '❓ مفيش عميل ولا مورد باسم $name.';
+    }
+    if (custs.length > 1 || sups.length > 1) {
+      return '🤔 الاسم ده ملتبس: '
+          '${[...custs.map((c) => 'عميل ${c.name}'), ...sups.map((s) => 'مورد ${s.name}')].join(' / ')}. '
+          'اكتب الاسم كامل أو قول «عميل …» / «مورد …».';
+    }
+    final blocks = <String>[];
+    if (custs.length == 1) blocks.add(_customerStatement(custs.first));
+    if (sups.length == 1) {
+      final s = sups.first;
+      blocks.add('📦 حساب المورد ${s.name}:\n'
+          '• إجمالي البضاعة: ${_m(s.goodsTotal)} ج\n'
+          '• المدفوع: ${_m(s.totalPaid)} ج\n'
+          '• المتبقي: ${_m(s.balanceDue)} ج');
+    }
+    return blocks.join('\n\n');
+  }
+
+  static String _customerStatement(Customer c) {
+    final bal = c.balanceDue;
+    final balLine = bal > 0.005
+        ? '• المتبقي عليه: ${_m(bal)} ج'
+        : bal < -0.005
+            ? '• له عندنا: ${_m(-bal)} ج'
+            : '• الحساب متسوّي (صفر)';
+    final rows = <MapEntry<DateTime, String>>[
+      for (final x in c.sales)
+        MapEntry(x.date,
+            '${arabicDate(x.date)} — ${x.isOpening ? 'رصيد سابق' : (x.item.isEmpty ? 'مبيعات آجلة' : x.item)} +${_m(x.total)} ج'),
+      for (final x in c.payments)
+        MapEntry(x.date,
+            '${arabicDate(x.date)} — ${x.opening ? 'رصيد له' : 'دفعة'} −${_m(x.amount)} ج'),
+    ]..sort((a, b) => b.key.compareTo(a.key));
+    final last = rows.take(5).map((e) => '  ◦ ${e.value}').join('\n');
+    return '👤 حساب العميل ${c.name}${c.archived ? ' (مؤرشف)' : ''}:\n'
+        '• إجمالي المبيعات الآجلة: ${_m(c.totalSales)} ج\n'
+        '• إجمالي المدفوع: ${_m(c.totalPaid)} ج\n'
+        '$balLine'
+        '${last.isEmpty ? '' : '\nآخر الحركات:\n$last'}';
+  }
+
+  /// دفعات العملاء في فترة. الأرصدة الافتتاحية مش تحصيل فعلي فبتتستبعد.
+  static String _customerPaymentsPeriod(String name, String period) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final tomorrow = DateTime(today.year, today.month, today.day + 1);
+    late DateTime from;
+    late String label;
+    switch (period) {
+      case 'today':
+        from = today;
+        label = 'النهارده';
+        break;
+      case 'week':
+        from = weekStartSaturday(now);
+        label = 'الأسبوع ده (من السبت)';
+        break;
+      case 'month':
+        from = DateTime(now.year, now.month, 1);
+        label = 'الشهر ده';
+        break;
+      default:
+        from = DateTime(2000);
+        label = 'إجمالًا';
+    }
+    List<Customer> scope;
+    if (name.trim().isNotEmpty) {
+      final r = _resolveCustomer(name);
+      if (!r.ok) return r.message!;
+      scope = [r.value!];
+    } else {
+      scope = StorageService.customers();
+    }
+    final lines = <String>[];
+    var total = 0.0;
+    var count = 0;
+    for (final c in scope) {
+      final ps = c.payments
+          .where((p) => !p.opening && !p.date.isBefore(from) && p.date.isBefore(tomorrow))
+          .toList()
+        ..sort((a, b) => b.date.compareTo(a.date));
+      if (ps.isEmpty) continue;
+      final sum = ps.fold(0.0, (a, p) => a + p.amount);
+      total += sum;
+      count += ps.length;
+      lines.add('• ${c.name}: ${_m(sum)} ج (${ps.length} ${ps.length == 1 ? 'دفعة' : 'دفعات'})');
+    }
+    if (lines.isEmpty) {
+      return name.trim().isEmpty
+          ? 'مفيش دفعات عملاء اتسجلت $label.'
+          : '${scope.first.name} ما دفعش حاجة $label.';
+    }
+    if (name.trim().isEmpty) {
+      return 'دفعات العملاء $label:\n${lines.join('\n')}\nالإجمالي: ${_m(total)} ج';
+    }
+    return '${scope.first.name} دفع $label ${_m(total)} ج ($count ${count == 1 ? 'دفعة' : 'دفعات'}).';
   }
 }

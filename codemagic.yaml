@@ -9,7 +9,7 @@ workflows:
       - name: Create standard Flutter Android project
         script: |
           set -e
-          flutter create --platforms=android .
+          flutter create --platforms=android --org com.moamen --project-name manager_assistant .
       - name: Get Flutter packages
         script: flutter pub get
       - name: Build debug APK

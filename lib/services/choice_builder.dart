@@ -38,6 +38,13 @@ class ChoiceBuilder {
         final label = counts[o.name]! > 1 ? '${o.name} ($k)' : o.name;
         out.add(ChatChoice(label, o.id, ChoiceKind.person));
       }
+    } else if (p.missing.contains('opening_direction')) {
+      out.addAll(const [
+        ChatChoice('عليه فلوس', 'عليه فلوس'),
+        ChatChoice('له فلوس عندنا', 'له فلوس'),
+      ]);
+    } else if (p.missing.contains('confirm_overpay')) {
+      out.add(const ChatChoice('أيوه، سجّلها', 'ايوه سجلها'));
     } else if (p.missing.contains('due_date')) {
       out.addAll(const [
         ChatChoice('النهارده', 'النهارده'),

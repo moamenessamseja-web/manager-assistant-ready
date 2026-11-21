@@ -9,6 +9,10 @@ class CreditSale {
   final DateTime date;
   final String note;
 
+  /// رصيد افتتاحي (عليه فلوس قبل بدء التسجيل) — مش حركة بيع فعلية في فترة.
+  /// الشاشة القديمة كانت بتسجّله بالاسم «رصيد سابق»، فبنتعرّف عليه برضه.
+  final bool opening;
+
   const CreditSale({
     required this.id,
     required this.item,
@@ -17,7 +21,10 @@ class CreditSale {
     required this.total,
     required this.date,
     this.note = '',
+    this.opening = false,
   });
+
+  bool get isOpening => opening || item == 'رصيد سابق';
 
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -27,6 +34,7 @@ class CreditSale {
         'total': total,
         'date': date.toIso8601String(),
         'note': note,
+        if (opening) 'opening': true,
       };
 
   factory CreditSale.fromJson(Map<String, dynamic> j) => CreditSale(
@@ -37,6 +45,7 @@ class CreditSale {
         total: (j['total'] as num?)?.toDouble() ?? 0,
         date: DateTime.parse(j['date'] as String),
         note: (j['note'] ?? '') as String,
+        opening: (j['opening'] ?? false) as bool,
       );
 }
 
@@ -46,11 +55,15 @@ class CustomerPayment {
   final DateTime date;
   final String note;
 
+  /// رصيد افتتاحي لصالح العميل (له فلوس عندنا) — مش تحصيل فعلي في فترة.
+  final bool opening;
+
   const CustomerPayment({
     required this.id,
     required this.amount,
     required this.date,
     this.note = '',
+    this.opening = false,
   });
 
   Map<String, dynamic> toJson() => {
@@ -58,6 +71,7 @@ class CustomerPayment {
         'amount': amount,
         'date': date.toIso8601String(),
         'note': note,
+        if (opening) 'opening': true,
       };
 
   factory CustomerPayment.fromJson(Map<String, dynamic> j) => CustomerPayment(
@@ -65,6 +79,7 @@ class CustomerPayment {
         amount: (j['amount'] as num?)?.toDouble() ?? 0,
         date: DateTime.parse(j['date'] as String),
         note: (j['note'] ?? '') as String,
+        opening: (j['opening'] ?? false) as bool,
       );
 }
 
@@ -98,6 +113,16 @@ class Customer {
   double get balanceDue => totalSales - totalPaid;
   bool get owes => balanceDue > 0.005;
   bool get hasHistory => sales.isNotEmpty || payments.isNotEmpty;
+
+  /// مبيعات/زيادات آجلة داخل الفترة [from, to) — **من غير** الرصيد الافتتاحي.
+  double salesBetween(DateTime from, DateTime to) => sales
+      .where((x) => !x.isOpening && !x.date.isBefore(from) && x.date.isBefore(to))
+      .fold(0.0, (s, x) => s + x.total);
+
+  /// دفعات محصّلة داخل الفترة [from, to) — **من غير** الرصيد الافتتاحي له.
+  double collectedBetween(DateTime from, DateTime to) => payments
+      .where((x) => !x.opening && !x.date.isBefore(from) && x.date.isBefore(to))
+      .fold(0.0, (s, x) => s + x.amount);
 
   DateTime? get lastActivity {
     DateTime? last;
@@ -168,3 +193,33 @@ List<Customer> filterCustomers(List<Customer> all, String filter) {
 /// لو لسه عليهم فلوس — الفلوس ما بتختفيش بالأرشفة).
 double totalReceivables(List<Customer> all) =>
     all.where((c) => c.owes).fold(0.0, (s, c) => s + c.balanceDue);
+
+/// بداية الأسبوع (السبت أول يوم، حسب اتفاقنا) عند منتصف الليل.
+DateTime weekStartSaturday(DateTime now) {
+  final today = DateTime(now.year, now.month, now.day);
+  final back = (today.weekday - DateTime.saturday + 7) % 7;
+  return DateTime(today.year, today.month, today.day - back);
+}
+
+/// ملخص حركة العملاء في فترة [from, to) — منفصل تمامًا عن الرصيد الكلي.
+class ReceivablesSummary {
+  /// إجمالي اللي لنا برّه دلوقتي (رصيد كلي، مش بيتأثر بالفترة).
+  final double outstanding;
+
+  /// مبيعات آجلة وزيادات في الفترة (بدون الأرصدة الافتتاحية).
+  final double charges;
+
+  /// تحصيلات في الفترة (بدون الأرصدة الافتتاحية).
+  final double collected;
+  const ReceivablesSummary(this.outstanding, this.charges, this.collected);
+}
+
+ReceivablesSummary receivablesSummary(
+    List<Customer> all, DateTime from, DateTime to) {
+  var charges = 0.0, collected = 0.0;
+  for (final c in all) {
+    charges += c.salesBetween(from, to);
+    collected += c.collectedBetween(from, to);
+  }
+  return ReceivablesSummary(totalReceivables(all), charges, collected);
+}

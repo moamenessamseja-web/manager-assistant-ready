@@ -7,6 +7,8 @@ import '../design/widgets.dart';
 import '../design/format.dart';
 import 'staff_screen.dart';
 import 'suppliers_screen.dart';
+import 'receivables_screen.dart';
+import '../models/customer.dart';
 import 'ask_assistant.dart';
 
 /// بريف الأسبوع — ملخص تشغيلي حي.
@@ -54,6 +56,10 @@ class _BriefScreenState extends State<BriefScreen> {
 
           final now = DateTime.now();
           final today = DateTime(now.year, now.month, now.day);
+          // المستحقات: الرصيد الكلي (حالي) منفصل عن حركة الأسبوع (من السبت).
+          // الأرصدة الافتتاحية مش بتتحسب مبيعات ولا تحصيل في الأسبوع.
+          final recv = receivablesSummary(StorageService.customers(),
+              weekStartSaturday(now), today.add(const Duration(days: 1)));
           final todayStr = today.toIso8601String().substring(0, 10);
           final absent = es.where((e) => !e.attendance.contains(todayStr)).toList();
           final pendingCommitments = cs.where((x) => x.status == 'pending').toList();
@@ -110,7 +116,7 @@ class _BriefScreenState extends State<BriefScreen> {
                 child: Column(
                   children: [
                     _Row(
-                      label: 'متأخرات عند العملاء',
+                      label: 'التزامات تحصيل متأخرة (مسجّلة قديمًا)',
                       value: '${overdue.toStringAsFixed(0)} ج',
                       badgeKind: overdue > 0 ? BadgeKind.danger : BadgeKind.success,
                       onTap: overdue > 0
@@ -141,6 +147,38 @@ class _BriefScreenState extends State<BriefScreen> {
                       label: 'توريدات متوقعة',
                       value: '$pendingDeliveries',
                       badgeKind: BadgeKind.accent,
+                    ),
+                  ],
+                ),
+              ),
+
+              // مستحقات العملاء (البيع الآجل)
+              const SizedBox(height: AppSpace.x4),
+              AppSectionHeader(title: 'مستحقات العملاء'),
+              AppCard(
+                padding: const EdgeInsets.all(AppSpace.x4),
+                child: Column(
+                  children: [
+                    _Row(
+                      label: 'إجمالي اللي لنا برّه (دلوقتي)',
+                      value: '${recv.outstanding.toStringAsFixed(0)} ج',
+                      badgeKind: recv.outstanding > 0
+                          ? BadgeKind.warning
+                          : BadgeKind.success,
+                      onTap: () =>
+                          _navigateTo(context, const ReceivablesScreen()),
+                    ),
+                    const SizedBox(height: AppSpace.x3),
+                    _Row(
+                      label: 'مبيعات آجلة وزيادات هذا الأسبوع (من السبت)',
+                      value: '${recv.charges.toStringAsFixed(0)} ج',
+                      badgeKind: BadgeKind.info,
+                    ),
+                    const SizedBox(height: AppSpace.x3),
+                    _Row(
+                      label: 'تحصيلات هذا الأسبوع (من السبت)',
+                      value: '${recv.collected.toStringAsFixed(0)} ج',
+                      badgeKind: BadgeKind.success,
                     ),
                   ],
                 ),

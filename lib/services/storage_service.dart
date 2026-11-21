@@ -236,6 +236,23 @@ class StorageService {
         AppState.instance.notify();
       });
 
+  /// قراءة-تعديل-كتابة **متسلسلة** لعميل واحد: القراءة نفسها جوّه البوابة،
+  /// فعمليتين متزامنتين ما يضيّعوش تعديل بعض. [mutate] بترجّع true لو غيّرت
+  /// حاجة فعلًا (false = تجاهل مثلًا لمعرّف مكرر → ما نكتبش). بترجّع true
+  /// لو اتكتب تعديل فعلي، false لو العميل مش موجود أو ما اتغيّرش شيء.
+  static Future<bool> mutateCustomer(
+          String id, bool Function(Customer c) mutate) =>
+      _serialize(() async {
+        final all = customers();
+        final i = all.indexWhere((c) => c.id == id);
+        if (i < 0) return false;
+        if (!mutate(all[i])) return false;
+        await _write(
+            'customers', all.map((a) => jsonEncode(a.toJson())).toList());
+        AppState.instance.notify();
+        return true;
+      });
+
   /// المؤرشفون مستبعدون افتراضيًا (عملية جديدة ما تتسجلش على عميل مؤرشف).
   static List<Customer> customersMatching(String name,
       {bool includeArchived = false}) {

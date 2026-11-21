@@ -2,6 +2,20 @@ name: Build APK
 
 on:
   workflow_dispatch:
+    inputs:
+      build_type:
+        description: >-
+          release = customer APK signed with the PRIVATE release key (fails if the signing secrets are missing;
+          never falls back to debug signing). debug = explicitly debug-signed test APK, NOT for customers.
+          release-selftest = proves the Gradle signing wiring with a throwaway key generated in this run
+          (NOT for customers; does not touch the real key).
+        type: choice
+        default: release
+        options: [release, debug, release-selftest]
+      publish_release:
+        description: "Also publish a GitHub Release (release builds only). Pushes to main always publish."
+        type: boolean
+        default: false
   push:
     branches: [ main ]
 
@@ -32,7 +46,7 @@ jobs:
       - name: Generate missing android/ scaffold (source zip lacked it)
         run: |
           if [ ! -d "android" ]; then
-            flutter create --platforms=android --org com.example --project-name manager_assistant .
+            flutter create --platforms=android --org com.moamen --project-name manager_assistant .
           fi
           # `flutter create .` only writes files that don't already exist, and this repo
           # has never committed test/widget_test.dart — so every run since android/ stopped
@@ -154,6 +168,99 @@ jobs:
           echo "---- build.gradle after update ----"
           cat android/app/build.gradle || cat android/app/build.gradle.kts
 
+      - name: Verify production application id in the generated Android project
+        run: |
+          # Permanent production identity. Fail here (not after a 10-minute build) if it ever drifts.
+          f=$(ls android/app/build.gradle.kts android/app/build.gradle 2>/dev/null | head -n 1)
+          echo "checking $f"
+          grep -E 'applicationId|namespace' "$f"
+          grep -q 'com.moamen.manager_assistant' "$f" || { echo "::error title=Wrong application id::expected com.moamen.manager_assistant in $f"; exit 1; }
+          if grep -q 'com\.example' "$f" android/app/src/main/AndroidManifest.xml; then
+            echo "::error title=com.example leftover::remove the com.example fallback"; exit 1
+          fi
+
+      - name: Prepare release signing (private key from secrets; NO silent debug fallback)
+        if: ${{ inputs.build_type != 'debug' }}
+        env:
+          BUILD_TYPE: ${{ inputs.build_type }}
+          KS_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set +x
+          ks="$RUNNER_TEMP/release.jks"
+          if [ "$BUILD_TYPE" = "release-selftest" ]; then
+            # Throwaway key, only to prove that the Gradle wiring signs with the configured key.
+            KS_PASS="selftest-$(openssl rand -hex 8)"; KEY_PASS="$KS_PASS"; KEY_ALIAS="selftest"
+            keytool -genkeypair -keystore "$ks" -storepass "$KS_PASS" -keypass "$KEY_PASS" -alias "$KEY_ALIAS" \
+              -keyalg RSA -keysize 2048 -validity 2 -dname "CN=SELFTEST ONLY, O=not-for-customers" >/dev/null 2>&1
+            echo "SELFTEST_KEY_SHA256=$(keytool -list -v -keystore "$ks" -storepass "$KS_PASS" -alias "$KEY_ALIAS" 2>/dev/null | sed -n 's/.*SHA256: //p' | tr -d ':' | tr 'A-F' 'a-f' | sed -n 1p)" >> "$GITHUB_ENV"
+          else
+            missing=""
+            [ -n "$KS_B64" ] || missing="$missing ANDROID_KEYSTORE_BASE64"
+            [ -n "$KS_PASS" ] || missing="$missing ANDROID_KEYSTORE_PASSWORD"
+            [ -n "$KEY_ALIAS" ] || missing="$missing ANDROID_KEY_ALIAS"
+            [ -n "$KEY_PASS" ] || missing="$missing ANDROID_KEY_PASSWORD"
+            if [ -n "$missing" ]; then
+              echo "::error title=Release signing secrets are missing::Not available to this workflow:$missing. Add them as repository secrets of THIS repository (secrets stored only in another repository are not visible here). The build stops instead of falling back to debug signing."
+              exit 1
+            fi
+            printf '%s' "$KS_B64" | base64 -d > "$ks" || { echo "::error::ANDROID_KEYSTORE_BASE64 is not valid base64"; exit 1; }
+            keytool -list -keystore "$ks" -storepass "$KS_PASS" -alias "$KEY_ALIAS" >/dev/null 2>&1 \
+              || { echo "::error title=Keystore check failed::alias/password do not open the keystore (values are never printed)"; exit 1; }
+          fi
+          umask 077
+          {
+            echo "storeFile=$ks"
+            echo "storePassword=$KS_PASS"
+            echo "keyAlias=$KEY_ALIAS"
+            echo "keyPassword=$KEY_PASS"
+          } > android/key.properties
+          if [ -f android/app/build.gradle.kts ]; then
+            cat >> android/app/build.gradle.kts << 'SIGN_EOF'
+
+          val keystoreProps = java.util.Properties().apply {
+              val f = rootProject.file("key.properties")
+              if (f.exists()) java.io.FileInputStream(f).use { load(it) }
+          }
+          android {
+              signingConfigs {
+                  create("release") {
+                      keyAlias = keystoreProps.getProperty("keyAlias")
+                      keyPassword = keystoreProps.getProperty("keyPassword")
+                      storeFile = file(keystoreProps.getProperty("storeFile"))
+                      storePassword = keystoreProps.getProperty("storePassword")
+                  }
+              }
+              buildTypes {
+                  release {
+                      signingConfig = signingConfigs.getByName("release")
+                  }
+              }
+          }
+          SIGN_EOF
+          else
+            cat >> android/app/build.gradle << 'SIGN_EOF'
+
+          def keystoreProps = new Properties()
+          def keystoreFile = rootProject.file("key.properties")
+          if (keystoreFile.exists()) { keystoreProps.load(new FileInputStream(keystoreFile)) }
+          android {
+              signingConfigs {
+                  release {
+                      keyAlias keystoreProps['keyAlias']
+                      keyPassword keystoreProps['keyPassword']
+                      storeFile file(keystoreProps['storeFile'])
+                      storePassword keystoreProps['storePassword']
+                  }
+              }
+              buildTypes { release { signingConfig signingConfigs.release } }
+          }
+          SIGN_EOF
+          fi
+          echo "release signing configured (key material not printed)"
+
       - run: flutter pub get
 
       - name: Guard — dependency drift (shared_preferences_android must stay 2.4.28)
@@ -177,21 +284,99 @@ jobs:
           flutter test --exclude-tags live 2>&1 | tee -a build_log.txt
 
       - name: Build APK
+        env:
+          BUILD_TYPE: ${{ inputs.build_type }}
         run: |
           set -o pipefail
-          flutter build apk --release 2>&1 | tee -a build_log.txt
+          # versionCode must grow between builds so a new APK installs over the previous one.
+          if [ "$BUILD_TYPE" = "debug" ]; then MODE=--debug; else MODE=--release; fi
+          flutter build apk $MODE --build-number=${{ github.run_number }} 2>&1 | tee -a build_log.txt
 
-      - name: Create Release with APK
-        if: success()
+      - name: Verify the REAL APK (applicationId, version, signing certificate, checksum)
+        id: apk
+        env:
+          BUILD_TYPE: ${{ inputs.build_type }}
+          EXPECTED_SIGNER: ${{ vars.EXPECTED_SIGNER_SHA256 }}
+        run: |
+          set -eo pipefail
+          apk=$(find build/app/outputs/flutter-apk -maxdepth 1 -name '*.apk' | sort | sed -n 1p)
+          [ -n "$apk" ] || { echo "::error::No APK produced"; exit 1; }
+          bt=$(ls -d "${ANDROID_HOME:-/usr/local/lib/android/sdk}"/build-tools/* | sort -V | tail -n 1)
+          "$bt/aapt2" dump badging "$apk" > "$RUNNER_TEMP/badging.txt"
+          badging=$(sed -n 1p "$RUNNER_TEMP/badging.txt")
+          # anchored: other attributes on this line (e.g. compileSdkVersionCodename) also contain "name='"
+          pkg=$(echo "$badging" | sed -n "s/^package: name='\([^']*\)'.*/\1/p")
+          vcode=$(echo "$badging" | sed -n "s/.*versionCode='\([^']*\)'.*/\1/p")
+          vname=$(echo "$badging" | sed -n "s/.*versionName='\([^']*\)'.*/\1/p")
+          certs=$("$bt/apksigner" verify --verbose --print-certs "$apk")
+          signer=$(echo "$certs" | sed -n 's/.*certificate SHA-256 digest: //p' | sed -n 1p)
+          subject=$(echo "$certs" | sed -n 's/.*certificate DN: //p' | sed -n 1p)
+          sha=$(sha256sum "$apk" | cut -d' ' -f1)
+          echo "package=$pkg versionName=$vname versionCode=$vcode"
+          echo "signer SHA-256=$signer  DN=$subject"
+          echo "APK SHA-256=$sha"
+          [ "$pkg" = "com.moamen.manager_assistant" ] || { echo "::error title=Wrong applicationId::$pkg"; exit 1; }
+          DEBUG_KEY=136966601854d1bd1397841d7d5ef10f1145bd8ac71c49f8ac6812857f136233
+          kind=release
+          case "$BUILD_TYPE" in
+            debug) kind=DEBUG-NOT-FOR-CUSTOMERS ;;
+            release-selftest)
+              kind=SELFTEST-NOT-FOR-CUSTOMERS
+              [ "$signer" = "$SELFTEST_KEY_SHA256" ] || { echo "::error title=Selftest signer mismatch::APK was not signed by the configured key (got $signer, expected $SELFTEST_KEY_SHA256)"; exit 1; }
+              ;;
+            *)
+              if [ "$signer" = "$DEBUG_KEY" ] || echo "$subject" | grep -qi "Android Debug"; then
+                echo "::error title=Release APK is debug-signed::refusing to ship"; exit 1
+              fi
+              if [ -n "$EXPECTED_SIGNER" ] && [ "$signer" != "$EXPECTED_SIGNER" ]; then
+                echo "::error title=Signing identity changed::signer $signer != EXPECTED_SIGNER_SHA256"; exit 1
+              fi
+              ;;
+          esac
+          out="manager-assistant-${vname}-b${vcode}-${kind}.apk"
+          cp "$apk" "build/$out"
+          {
+            echo "apk=build/$out"; echo "kind=$kind"; echo "pkg=$pkg"; echo "vname=$vname"; echo "vcode=$vcode"
+            echo "signer=$signer"; echo "sha=$sha"
+          } >> "$GITHUB_OUTPUT"
+          {
+            echo "### APK verification ($kind)"
+            echo "- applicationId: \`$pkg\`"
+            echo "- version: \`$vname\` (code \`$vcode\`)"
+            echo "- signing certificate SHA-256: \`$signer\`"
+            echo "- signing certificate DN: \`$subject\`"
+            echo "- APK SHA-256: \`$sha\`"
+            if [ "$kind" = release ] && [ -z "$EXPECTED_SIGNER" ]; then
+              echo "- ℹ️ first release: store the signer fingerprint above in the repository variable EXPECTED_SIGNER_SHA256 so any later change in signing identity fails the build."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove signing material from the runner
+        if: always()
+        run: rm -f android/key.properties "$RUNNER_TEMP/release.jks"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: apk-${{ steps.apk.outputs.kind }}-${{ github.run_number }}
+          path: ${{ steps.apk.outputs.apk }}
+          retention-days: 30
+
+      - name: Create GitHub Release with the signed APK
+        if: ${{ success() && steps.apk.outputs.kind == 'release' && (github.event_name == 'push' || inputs.publish_release == true) }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           TAG="build-${{ github.run_number }}"
-          gh release create "$TAG" \
-            "build/app/outputs/flutter-apk/app-release.apk" \
+          gh release create "$TAG" "${{ steps.apk.outputs.apk }}" \
             --target "${{ github.sha }}" \
-            --title "Manager Assistant APK build #${{ github.run_number }}" \
-            --notes "Automated release build from commit ${{ github.sha }} (branch ${{ github.ref_name }}).
+            --title "Manager Assistant build #${{ github.run_number }} (${{ steps.apk.outputs.vname }})" \
+            --notes "Release-signed APK from commit ${{ github.sha }} (branch ${{ github.ref_name }}).
+
+          - applicationId: ${{ steps.apk.outputs.pkg }}
+          - version: ${{ steps.apk.outputs.vname }} (code ${{ steps.apk.outputs.vcode }})
+          - signing certificate SHA-256: ${{ steps.apk.outputs.signer }}
+          - APK SHA-256: ${{ steps.apk.outputs.sha }}
 
           Toolchain:
           $(cat toolchain.txt)"
