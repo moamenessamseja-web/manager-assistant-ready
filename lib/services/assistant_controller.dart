@@ -103,6 +103,9 @@ class AssistantController {
     fields = Map<String, dynamic>.from(fields);
     final intent = fields['intent'] as String;
 
+    if (intent == 'add_deduction' || intent == 'add_bonus') {
+      fields['op_id'] ??= const Uuid().v4();
+    }
     if (_customerIntents.contains(intent)) {
       // معرّف ثابت للعملية: بيتحفظ مع العملية المعلّقة، وبيبقى معرّف السجل
       // نفسه — فأي تنفيذ مكرر (حتى بعد إعادة تشغيل التطبيق) يترفض على مستوى السجل.
@@ -620,6 +623,10 @@ class AssistantController {
         return _addEmployee(d);
       case 'add_advance':
         return _addAdvance(d, text);
+      case 'add_deduction':
+        return _addDeductionOrBonus(d, text, bonus: false);
+      case 'add_bonus':
+        return _addDeductionOrBonus(d, text, bonus: true);
       case 'mark_attendance':
         return _markAttendance(d);
       case 'add_supplier':
@@ -934,6 +941,34 @@ class AssistantController {
     );
     await StorageService.saveEmployee(e);
     return '✅ سجلت الموظف ${e.name}، المرتب ${e.salaryMonthly.toStringAsFixed(0)} جنيه.';
+  }
+
+  /// خصم أو مكافأة لموظف — سجل مالي منفصل (مش سلفة)، بمعرّف ثابت للعملية
+  /// فالتنفيذ المكرر ما يسجّلش مرتين.
+  static Future<String> _addDeductionOrBonus(Map<String, dynamic> d, String text,
+      {required bool bonus}) async {
+    final name = d['person'] ?? d['employee_name'] ?? '';
+    final resolved = _resolveEmployee(name, d['person_id'] as String?);
+    if (!resolved.ok) return resolved.message!;
+    final e = resolved.value!;
+    final amount = (d['amount'] as num?)?.toDouble() ?? 0;
+    if (amount <= 0) return '❓ محتاج المبلغ.';
+    final opId = (d['op_id'] ?? const Uuid().v4()).toString();
+    final id = '${bonus ? 'bonus' : 'ded'}_$opId';
+    final exists = bonus
+        ? e.bonuses.any((x) => x.id == id)
+        : e.deductions.any((x) => x.id == id);
+    if (exists) return 'ℹ️ العملية دي اتسجلت قبل كده، فمش هكررها.';
+    final reason = (d['text_original'] ?? text).toString();
+    if (bonus) {
+      e.bonuses.add(EmployeeBonus(id: id, amount: amount, reason: reason, date: DateTime.now()));
+    } else {
+      e.deductions.add(EmployeeDeduction(id: id, amount: amount, reason: reason, date: DateTime.now()));
+    }
+    await StorageService.saveEmployee(e);
+    return bonus
+        ? '✅ سجلت مكافأة ${_m(amount)} ج لـ ${e.name}. صافي المستحق ${_m(e.netPayable)} ج.'
+        : '✅ سجلت خصم ${_m(amount)} ج على ${e.name}. صافي المستحق ${_m(e.netPayable)} ج.';
   }
 
   static Future<String> _addAdvance(Map<String, dynamic> d, String text) async {

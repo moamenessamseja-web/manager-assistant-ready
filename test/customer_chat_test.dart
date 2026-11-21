@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:manager_assistant/screens/instructions_screen.dart';
 import 'package:manager_assistant/models/customer.dart';
+import 'package:manager_assistant/models/employee.dart';
 import 'package:manager_assistant/models/supplier.dart';
 import 'package:manager_assistant/services/assistant_controller.dart';
 import 'package:manager_assistant/services/choice_builder.dart';
@@ -269,5 +270,44 @@ void main() {
   testWidgets('شاشة التعليمات فيها قسم العملاء والمستحقات', (tester) async {
     await tester.pumpWidget(const MaterialApp(home: InstructionsScreen()));
     expect(find.text('العملاء والمستحقات (البيع الآجل)'), findsOneWidget);
+  });
+
+  group('موظفين — خصم ومكافأة', () {
+    Employee emp() => Employee(
+        id: 'e1', name: 'أحمد', role: 'عامل',
+        startDate: DateTime.now().subtract(const Duration(days: 10)), salaryMonthly: 3000);
+    Employee e1() => StorageService.employees().firstWhere((x) => x.id == 'e1');
+
+    test('«اخصم من أحمد ١٠٠ جنيه» يسجّل خصم فعلي', () async {
+      await StorageService.saveEmployee(emp());
+      final r = await AssistantController.handle('اخصم من أحمد ١٠٠ جنيه');
+      expect(r, contains('✅'));
+      expect(e1().deductions.length, 1);
+      expect(e1().totalDeductions, 100);
+      expect(e1().advances, isEmpty);
+    });
+
+    test('«مكافأة لأحمد ٢٠٠ جنيه» يسجّل مكافأة فعلية', () async {
+      await StorageService.saveEmployee(emp());
+      final r = await AssistantController.handle('مكافأة لأحمد ٢٠٠ جنيه');
+      expect(r, contains('✅'));
+      expect(e1().totalBonuses, 200);
+    });
+
+    test('من غير مبلغ: يسأل ومفيش سجل', () async {
+      await StorageService.saveEmployee(emp());
+      await AssistantController.handle('اخصم من أحمد');
+      expect(e1().deductions, isEmpty);
+      final r = await AssistantController.handle('٥٠');
+      expect(r, contains('✅'));
+      expect(e1().totalDeductions, 50);
+    });
+
+    test('نفس معرّف الرسالة مرتين = خصم واحد', () async {
+      await StorageService.saveEmployee(emp());
+      await AssistantController.handle('اخصم من أحمد ١٠٠ جنيه', messageId: 'd1');
+      await AssistantController.handle('اخصم من أحمد ١٠٠ جنيه', messageId: 'd1');
+      expect(e1().deductions.length, 1);
+    });
   });
 }
