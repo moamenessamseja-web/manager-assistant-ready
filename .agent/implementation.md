@@ -84,3 +84,19 @@ toolchain fingerprint — Implemented, not yet verified.
 | 87 | 667ebc7 (main) | green | owner confirmed |
 | 88-91 | – | red (widget-test/storage-gate/name-clash/ListTile issues, see state file) | – |
 | 92 | 1565f25 | green (Gemini removed + Receivables tab, 101 tests) | not yet |
+
+## Session 5 additions (2026-11-21)
+- `lib/models/customer.dart`: `opening` flag on `CreditSale`/`CustomerPayment` (additive JSON; legacy item
+  «رصيد سابق» also treated as opening), `salesBetween/collectedBetween`, `weekStartSaturday`, `receivablesSummary`.
+- `lib/models/commitment.dart`: optional `customerId`.
+- `lib/models/employee.dart`: `payType/payRate/shiftHours/shiftPattern`, `EmployeeTip`, `workedHours`,
+  `attendancePay` by pay type (monthly default unchanged).
+- `lib/services/local_command_parser.dart`: customer intents/queries, `pastBias` dates, `_balanceDirection`,
+  `_periodOf`, `confirm_overpay` / `opening_direction` slot answers, extra stop words.
+- `lib/services/assistant_controller.dart`: `_addCustomer`, `_customerEntry`, `_customerPromise`, `_accountLookup`,
+  `_customerPaymentsPeriod`, resolver without guessing, `resetGuardForTest`, `_pickOption` fix, slot answers beat
+  "new command" detection during a pending question.
+- `lib/services/storage_service.dart`: `mutateCustomer` (serialised read-modify-write).
+- `lib/screens`: brief (receivables section), instructions (customers), employee details (pay type, shifts, tips),
+  chat (voice fills the field only).
+- `.github/workflows/build-apk.yml`, `ios-compat.yml`, `tool/ios_inject_plist.sh`, `codemagic.yaml`.

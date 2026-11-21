@@ -5,6 +5,10 @@ name: iOS compatibility (compile only, NOT a device test)
 # App Store readiness. Manual trigger only (macOS runners are slow).
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/ios-compat.yml'
+      - 'tool/ios_inject_plist.sh'
 
 permissions:
   contents: read

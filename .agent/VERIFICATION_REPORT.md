@@ -96,3 +96,18 @@ These are the only items that require real work — everything above is **alread
 
 **Explicit non-goals:** re-adding `ListenableBuilder`, re-doing `normalizeArabic`, re-doing the
 ProGuard rules, re-writing Memory/Weekly Brief — all verified as already working.
+
+## Session 5 (2026-11-21) — verification of the commercial-readiness branch
+
+- **Local (sandbox, plain Dart 3.14.1, no Flutter SDK):** baseline parser suite 28/28 before edits and after;
+  `customer_parser_test` 33/33; `employee_pay_test` 9/9; `dart analyze` clean on models, parser, choice builder.
+  The controller was analysed best-effort only (Flutter/uuid packages unavailable) — CI is the real check.
+- **CI (feature branch, workflow_dispatch):** first run failed on 2 tests (my duplicate-guard test and an
+  instructions widget test that the new section pushed out of the lazy list) — both test issues, fixed. Next run:
+  analyze ✅, **190 tests passed** ✅, then failed in Gradle because `java.util.Properties` does not resolve inside a
+  `.kts` script — fixed (Kotlin stdlib). Final `release-selftest` run **44937906901**: all steps ✅
+  (id guard, signing setup, analyze, tests, build, real-APK verification, signer == the throwaway key).
+- **Not independently re-checked:** I could not download the artifact from the sandbox (redirect blocked), so
+  versionName/versionCode/fingerprints were asserted by the workflow's own steps, not re-read by me.
+- **NOT verified:** real release signing with the owner's private key (no secrets exist), installation on a device,
+  any UI on a device, Arabic speech on a device, iOS on a device.

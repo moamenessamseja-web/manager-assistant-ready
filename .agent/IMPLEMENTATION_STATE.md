@@ -1,3 +1,67 @@
+# SESSION 5 — 2026-11-21 (commercial readiness: customer receivables, production identity, signing)
+
+> Branch: `feature/customer-receivables-commercial`, created from the owner-confirmed baseline
+> **`d2a17ef` (Build #93)**. **Not merged into `main`** (owner approval required). `d2a17ef` is reachable from
+> `phase-b/from-32df13f`, not from `main`.
+
+## Evidence levels (never merge these)
+| Item | Implemented | Automated tests (CI) | CI build | APK signing verified | Owner device |
+|---|---|---|---|---|---|
+| Customer chat ops (add / charge / payment / promise / queries) | ✅ | ✅ `customer_parser_test` (33, also run locally) + `customer_chat_test` (controller, CI) | ✅ | n/a | ❌ not yet |
+| Brief: receivables outstanding vs this-week charges/collections (week starts Saturday) | ✅ | model-level ✅ (`receivablesSummary`); widget not tested | ✅ | n/a | ❌ |
+| Instructions: customers section | ✅ | ✅ widget test | ✅ | n/a | ❌ |
+| applicationId `com.moamen.manager_assistant` | ✅ (CI scaffold `--org com.moamen`, guard step) | n/a | ✅ asserted from the built APK by aapt2 in the **selftest** run | n/a | ❌ |
+| Release signing with the private key | ✅ wiring written | n/a | ⚠️ **selftest only** (throwaway key; APK signer == configured key, asserted in CI) | ❌ **real key never exercised** — no secrets exist in the repo (see below) | ❌ |
+| Voice → editable field, no auto-send; Arabic locale checked | ✅ | ❌ (STT not unit-testable) | ✅ compiles | n/a | ❌ |
+| Employee pay types / shifts / tips (additive) | ✅ model + edit dialog + tips action | ✅ `employee_pay_test` (9) | ✅ | n/a | ❌ UI never seen on a device |
+| iOS (plist script + compile-only workflow) | ✅ | n/a | see VERIFICATION_REPORT | n/a | ❌ never on a device |
+| README / README_AR rewrite | ✅ | n/a | n/a | n/a | n/a |
+
+## Critical findings this session
+1. **No GitHub Actions secrets exist** in `manager-assistant-ready`, `Flutter-Android-Build` or `Flutter-App-Template`
+   (API listing returned empty; no environments either). The owner believed they were configured. A real
+   `build_type=release` run therefore **fails by design** at "Prepare release signing" until the four secrets
+   (`ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`) are added
+   to **this** repository. The gateway (`Flutter-Android-Build@main a0a03e3`, v1.0.0) has no `workflow_call.secrets`
+   and no release-signing step at all, and this app does not call it (own workflow).
+2. Build #93 and earlier were **debug-signed with a random CI key** (Flutter's default when no release config exists).
+3. The previous app id was `com.example.manager_assistant`. The new id is a **different app**: it installs beside the
+   old one and starts with empty data. Old test data is untouched. There is **no backup/restore** in the code.
+4. Pre-existing behavior that contradicted this session's brief and was fixed: recognised speech used to be **sent
+   automatically**; now it only fills the text box.
+5. `_pickOption` matched by first name only (would pick "محمد علي" for the reply "محمد حسن"). Fixed (full name
+   first; first-name only if unique).
+6. The old `debtors` query read legacy `debt_to_collect` commitments, not customer accounts. Now it reads customers;
+   legacy commitments are shown separately and never added to the total.
+7. **Security:** the GitHub token given in chat has admin:enterprise / delete_repo / admin:org scopes. It must be
+   revoked and replaced by a fine-grained token (Contents RW, PR RW, Actions RW on the three repos).
+
+## Design decisions (customers)
+- Intents: `add_customer`, `customer_charge`, `customer_payment`, `customer_promise`; queries `account_lookup`,
+  `customer_payments_period`; `debtors` now = customers with balance > 0.
+- Disambiguation by grammar: **third person** «جمال دفع / سدد» or «خصم من دين/حساب X» = customer payment;
+  **first person** «دفعت لجمال» stays a supplier payment; «ضيف سلفة على أحمد» stays an employee advance.
+- A name must already be a customer; unknown name → no write, suggests «عميل جديد X» (and says if it is a supplier).
+- Dates for ledger entries are **past-biased** («٢٠ نوفمبر» = most recent such date, not next year); future dates are
+  rejected. Reminders keep the old future-biased rules.
+- Opening balances are flagged (`opening`) and excluded from "charges"/"collections" of any period.
+- A payment larger than the balance needs explicit confirmation (`confirm_overpay`), otherwise nothing is written.
+- Idempotency: a stable `op_id` is created with the operation and becomes the record id
+  (`sale_/pay_/promise_/cust_<op_id>`); `StorageService.mutateCustomer` is a serialised read-modify-write that
+  rejects duplicate ids. Message-level idempotency (persistent) is unchanged.
+- A promise to pay is a `Commitment(type: customer_promise, customerId)`; it never touches the balance.
+
+## Known gaps / next
+- Real release build with the private key (needs secrets). Then store the printed signer SHA-256 in the repo
+  variable `EXPECTED_SIGNER_SHA256`.
+- Backup/restore does not exist; README states it. Needed before the owner migrates real data between app ids.
+- `add_deduction` / `add_bonus` intents are detected by the parser but `_dispatch` has no case for them (reply:
+  "لم أفهم العملية"). Pre-existing (present at `d2a17ef`); not touched — flag to owner.
+- Today screen "المتأخرات المالية" still uses legacy commitments, not customer accounts (Brief now shows both,
+  separately labelled).
+- No `AGENTS.md` exists in this repo (the brief names it); `.agent/README.md` is the entry point.
+- iOS: notifications plugin needs AppDelegate setup on a real iOS project; not done or verified.
+
 # Implementation State
 
 > **SESSION 4 OVERRIDE (2026-10-17) — read before anything below.**

@@ -48,3 +48,12 @@
 3. StaffScreen doesn't listen to AppState — stale after Chat mutations
 4. Weekly Brief — static display, no interactive navigation
 5. Memory screen — search only, no business overview on empty query
+
+## Session 5 notes (2026-11-21)
+- Receivables truth = `Customer` ledger (sales − payments). Legacy `debt_to_collect` commitments are a separate,
+  older concept; they are displayed separately and are never summed with ledger balances.
+- Periods are half-open `[from, to)`; weeks start on Saturday; opening balances are excluded from period movement.
+- Signing lives in the app's own workflow, not in the shared gateway (which has no secret support). Release builds
+  refuse debug signing and refuse an unexpected signer when `EXPECTED_SIGNER_SHA256` is set.
+- Risk: the Android project is generated in CI and patched by shell appends; any Flutter template change can break
+  the patches. The guard steps and the selftest exist to catch that early.
