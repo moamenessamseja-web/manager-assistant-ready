@@ -2,12 +2,12 @@
 
 - Work branch: `feature/customer-receivables-commercial` (from `d2a17ef` = Build #93). **Do not merge to `main`
   without the owner's explicit approval.** Full evidence table: top of `IMPLEMENTATION_STATE.md`.
-- Owner actions needed: (1) add the 4 signing secrets to THIS repo (names in `IMPLEMENTATION_STATE.md`); never paste
-  the keystore in chat; (2) revoke the broad-scope GitHub token that was shared in chat; (3) install the new APK
-  beside the old one and test the customer flows on a phone.
-- Run a customer release: Actions → "Build APK" → `build_type = release` (fails clearly if secrets are missing).
-  `release-selftest` = wiring proof with a throwaway key; `debug` = test only. Both are named
-  `…-NOT-FOR-CUSTOMERS` and are never published as a release.
+- **UPDATE (owner decision, later same day): signing/keys work was DROPPED.** The workflow now builds a plain release
+  APK (Flutter default debug key) and publishes it as a GitHub Release (pre-release on non-main branches). No secrets,
+  no artifact. Build #97 = commit `cb39da8`, green (analyze + 190+ tests + build). Employee deduction/bonus commands
+  now execute (were detected but not dispatched). Evidence-table rows about signing are historical.
+- Owner actions: (1) revoke the broad-scope GitHub token shared in chat; (2) install build-97 and test on a phone.
+- Each CI build may carry a different debug signature → uninstall the previous build before installing the next.
 
 # Handoff — start here
 

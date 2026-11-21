@@ -58,7 +58,5 @@ English: [README.md](README.md)
 - اختبارات بدون إنترنت: `flutter test --exclude-tags live`.
 - مشروع أندرويد بيتولّد في CI بالأمر `flutter create --org com.moamen --project-name manager_assistant`؛
   معرّف التطبيق **`com.moamen.manager_assistant`**.
-- نسخ الـRelease بتتوقّع بمفتاح خاص عن طريق secrets المستودع
-  (`ANDROID_KEYSTORE_BASE64`، `ANDROID_KEYSTORE_PASSWORD`، `ANDROID_KEY_ALIAS`، `ANDROID_KEY_PASSWORD`). لو ناقصة
-  البناء بيفشل ومبيرجعش للتوقيع الافتراضي. ممنوع رفع ملف المفتاح أو كلمات سره على المستودع.
+- البناء: Actions ← Build APK بيطلّع APK (بعد التحليل والاختبارات) وبينشره كـRelease للتنزيل اليدوي. التوقيع بالمفتاح الافتراضي (debug) — مش هوية توقيع إنتاجية؛ المفتاح الخاص قرار لاحق قبل أي نشر على المتجر.
 - ذاكرة المشروع وأدلة التحقق في `.agent/`.

@@ -61,7 +61,5 @@ retry or a double tap cannot record it twice. Success is reported only after the
   Dart.
 - The Android project is generated in CI (`flutter create --org com.moamen --project-name manager_assistant`);
   application id **`com.moamen.manager_assistant`**.
-- Release builds are signed with a private key supplied through repository secrets
-  (`ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`). The build
-  fails if they are missing; it never falls back to debug signing. Never commit the keystore or its passwords.
+- Builds: Actions → "Build APK" produces a release APK (analyze + tests first) and publishes it as a GitHub Release for manual download. Signing: Flutter's default (debug) key — not a production signing identity; a private release key is a deliberate later step before any store release.
 - Project memory and verification evidence live in `.agent/`.
