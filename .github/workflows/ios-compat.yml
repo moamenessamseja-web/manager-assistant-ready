@@ -1,0 +1,38 @@
+name: iOS compatibility (compile only, NOT a device test)
+
+# Proves that the Flutter project still generates and COMPILES for iOS with the speech/microphone
+# privacy strings in place. It does not sign, does not run on a device and says nothing about
+# App Store readiness. Manual trigger only (macOS runners are slow).
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ios-compile:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.7'
+          channel: 'stable'
+      - run: flutter pub get
+      - name: Generate iOS scaffold (not committed; same approach as Android)
+        run: |
+          if [ ! -d ios ]; then
+            flutter create --platforms=ios --org com.moamen --project-name manager_assistant .
+          fi
+          rm -f test/widget_test.dart
+      - name: Add speech/microphone usage descriptions
+        run: bash tool/ios_inject_plist.sh
+      - name: Compile for iOS without code signing
+        run: flutter build ios --release --no-codesign 2>&1 | tee ios_build.log
+      - name: Summary
+        run: |
+          {
+            echo "### iOS compile check"
+            echo "- Result: compiled WITHOUT code signing."
+            echo "- NOT verified: device run, Arabic speech recognition on iOS, notifications on iOS, App Store requirements."
+          } >> "$GITHUB_STEP_SUMMARY"

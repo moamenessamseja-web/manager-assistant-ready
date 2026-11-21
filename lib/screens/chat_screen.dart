@@ -26,8 +26,6 @@ class _S extends State<ChatScreen> {
   String? _choicePendingId;
   bool _listening = false;
 
-  /// يمنع إرسال النص الصوتي مرتين لنفس جلسة التسجيل (§7).
-  bool _voiceSent = false;
   String? _errorMsg;
   final _msgs = <ChatMessage>[];
 
@@ -228,25 +226,55 @@ class _S extends State<ChatScreen> {
       return;
     }
 
+    // العربية لازم تتأكد من الجهاز (مش بنفترضها): بندوّر على لغة عربية متاحة
+    // فعلًا، وبنفضّل مصر. لو مفيش، ما نسمعش بلغة غلط — الكتابة (أو إملاء لوحة
+    // المفاتيح) تفضل متاحة.
+    String? arLocale;
+    try {
+      final locales = await _stt.locales();
+      String norm(String id) => id.replaceAll('-', '_').toLowerCase();
+      final ar = locales.where((l) => norm(l.localeId).startsWith('ar')).toList();
+      for (final l in ar) {
+        if (norm(l.localeId) == 'ar_eg') arLocale = l.localeId;
+      }
+      arLocale ??= ar.isEmpty ? null : ar.first.localeId;
+    } catch (e, st) {
+      AppErrorService.log('chat.sttLocales', e, st);
+    }
+    if (arLocale == null) {
+      if (mounted) {
+        setState(() => _errorMsg = 'التعرف على الكلام بالعربية مش متاح على جهازك');
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+                'التعرف على الكلام بالعربية مش متاح على جهازك. اكتب الأمر، أو استخدم الميكروفون اللي في لوحة المفاتيح (الإملاء) وراجع النص قبل الإرسال.'),
+          ),
+        );
+      }
+      return;
+    }
+
     setState(() {
       _listening = true;
       _errorMsg = null;
-      _voiceSent = false;
     });
 
     await _stt.listen(
       listenOptions: SpeechListenOptions(
-        localeId: 'ar_EG',
+        localeId: arLocale,
         listenMode: ListenMode.confirmation,
       ),
       onResult: (r) {
-        if (!r.finalResult) return;
         final words = r.recognizedWords.trim();
-        // نعرض النص المسموع للمستخدم ثم نرسله **مرة واحدة فقط** (§7).
-        if (words.isEmpty || _voiceSent || _busy) return;
-        _voiceSent = true;
-        setState(() => _text.text = words);
-        _send(words);
+        if (words.isEmpty) return;
+        // **ما بنبعتش أبدًا من الصوت.** النص بيدخل الحقل ويتراجع ويتعدّل،
+        // والمستخدم هو اللي بيضغط «إرسال» — عشان أمر مالي ما يتنفّذش من
+        // غلطة في التعرف على الكلام.
+        setState(() {
+          _text.text = words;
+          _text.selection = TextSelection.collapsed(offset: words.length);
+          if (r.finalResult) _listening = false;
+        });
       },
     );
   }

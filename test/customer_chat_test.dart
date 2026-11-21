@@ -178,6 +178,8 @@ void main() {
 
     test('نفس الاسم مرتين: مفيش سجل مكرر', () async {
       await AssistantController.handle('عميل جديد جمال');
+      // نتخطّى حارس «نفس الأمر خلال ثواني» عشان نختبر منع التكرار الدائم (الاسم).
+      AssistantController.resetGuardForTest();
       final r = await AssistantController.handle('عميل جديد جمال');
       expect(r, contains('مسجّل بالفعل'));
       expect(StorageService.customers().length, 1);

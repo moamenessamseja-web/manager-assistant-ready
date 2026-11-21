@@ -152,6 +152,10 @@ void main() {
       expect(find.text('تعليمات الاستخدام'), findsOneWidget);
       expect(find.text('الكميات والوحدات'), findsOneWidget);
       expect(find.text('التذكيرات والالتزامات'), findsOneWidget);
+      // القائمة طويلة (ListView كسول): نمرّر لآخر قسم قبل ما نتحقق منه.
+      await tester.scrollUntilVisible(
+          find.text('إيه اللي بيشتغل من غير إنترنت؟'), 300,
+          scrollable: find.byType(Scrollable).first);
       expect(find.text('إيه اللي بيشتغل من غير إنترنت؟'), findsOneWidget);
     });
   });

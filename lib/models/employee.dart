@@ -106,6 +106,24 @@ class EmployeeBonus {
       date: DateTime.parse(j['date']));
 }
 
+/// إكرامية: بتتسجّل لوحدها وما بتدخلش في الأجر ولا في صافي المستحق.
+class EmployeeTip {
+  String id;
+  double amount;
+  DateTime date;
+  String note;
+  EmployeeTip({required this.id, required this.amount, required this.date, this.note = ''});
+
+  Map<String, dynamic> toJson() =>
+      {'id': id, 'amount': amount, 'date': date.toIso8601String(), 'note': note};
+
+  factory EmployeeTip.fromJson(Map<String, dynamic> j) => EmployeeTip(
+      id: j['id'],
+      amount: (j['amount'] as num).toDouble(),
+      date: DateTime.parse(j['date']),
+      note: j['note'] ?? '');
+}
+
 /// ملاحظة حرة — **لا** تُطبَّق ماليًا تلقائيًا.
 class EmployeeNote {
   String id;
@@ -151,6 +169,23 @@ class Employee {
   List<EmployeeBonus> bonuses;
   List<EmployeeNote> notes;
 
+  // ── نظام الأجر والشيفتات (إضافي ومتوافق مع القديم: الافتراضي شهري) ──
+  // جدول الشغل (شيفت ٨/١٢ ساعة، ثابت/متناوب) منفصل تمامًا عن طريقة حساب الأجر.
+  /// 'monthly' (الافتراضي) | 'daily' | 'shift' | 'hourly'
+  String payType;
+
+  /// السعر لغير الشهري: يومية / سعر الشيفت / سعر الساعة (ج).
+  double payRate;
+
+  /// طول الشيفت بالساعات (٨ أو ١٢)، 0 = غير محدد.
+  int shiftHours;
+
+  /// 'fixed' | 'rotating' — معلومة تنظيمية بس.
+  String shiftPattern;
+
+  /// إكراميات منفصلة عن الأجر.
+  List<EmployeeTip> tips;
+
   Employee({
     required this.id,
     required this.name,
@@ -169,7 +204,13 @@ class Employee {
     List<EmployeeDeduction>? deductions,
     List<EmployeeBonus>? bonuses,
     List<EmployeeNote>? notes,
-  })  : advances = advances ?? [],
+    this.payType = 'monthly',
+    this.payRate = 0,
+    this.shiftHours = 0,
+    this.shiftPattern = 'fixed',
+    List<EmployeeTip>? tips,
+  })  : tips = tips ?? [],
+        advances = advances ?? [],
         attendance = attendance ?? [],
         attendanceLog = attendanceLog ?? [],
         payments = payments ?? [],
@@ -187,16 +228,81 @@ class Employee {
 
   double get totalAdvances => advances.fold(0, (s, a) => s + a.amount);
   int get absenceDays => workingDays > attendance.length ? workingDays - attendance.length : 0;
-  double get salaryDue => (salaryMonthly / 30 * attendance.length) - totalAdvances;
-  double get remainingSalary => salaryMonthly - totalAdvances;
+  bool get isMonthly => payType == 'monthly';
+  double get salaryDue =>
+      isMonthly ? (salaryMonthly / 30 * attendance.length) - totalAdvances : attendancePay - totalAdvances;
+  // الشهري: زي ما كان (المرتب − السلف). غير الشهري: مفيش «مرتب ثابت» — المتبقي
+  // = المستحق فعلًا حسب الحضور − السلف.
+  double get remainingSalary =>
+      isMonthly ? salaryMonthly - totalAdvances : attendancePay - totalAdvances;
 
   // ── إجماليات جديدة (إضافية، بلا خلط مع قواعد الراتب) ──
   double get totalPayments => payments.fold(0, (s, p) => s + p.amount);
   double get totalDeductions => deductions.fold(0, (s, d) => s + d.amount);
   double get totalBonuses => bonuses.fold(0, (s, b) => s + b.amount);
 
-  /// المستحق حسب أيام الحضور فعلاً (معلومة منفصلة وواضحة).
-  double get attendancePay => salaryMonthly / 30 * attendance.length;
+  /// ساعات الشغل الفعلية لأيام الحضور: من الحضور/الانصراف المسجّلين، ولو يوم
+  /// من غير انصراف بنستخدم طول الشيفت المحدد؛ ولو مفيش الاتنين اليوم ده بيتعدّ
+  /// في [daysWithoutHours] (مفيش تخمين).
+  double get workedHours {
+    var h = 0.0;
+    for (final day in attendance) {
+      AttendanceEntry? en;
+      for (final a in attendanceLog) {
+        if (a.day == day) en = a;
+      }
+      if (en?.checkIn != null && en?.checkOut != null) {
+        h += en!.checkOut!.difference(en.checkIn!).inMinutes / 60.0;
+      } else if (shiftHours > 0) {
+        h += shiftHours;
+      }
+    }
+    return h;
+  }
+
+  int get daysWithoutHours {
+    if (payType != 'hourly') return 0;
+    var n = 0;
+    for (final day in attendance) {
+      AttendanceEntry? en;
+      for (final a in attendanceLog) {
+        if (a.day == day) en = a;
+      }
+      final has = (en?.checkIn != null && en?.checkOut != null) || shiftHours > 0;
+      if (!has) n++;
+    }
+    return n;
+  }
+
+  /// المستحق حسب أيام الحضور فعلاً (معلومة منفصلة وواضحة). حسب نوع الأجر:
+  /// شهري = المرتب ÷ ٣٠ لكل يوم · يومي/شيفت = السعر × أيام الحضور ·
+  /// بالساعة = السعر × الساعات الفعلية.
+  double get attendancePay {
+    switch (payType) {
+      case 'daily':
+      case 'shift':
+        return payRate * attendance.length;
+      case 'hourly':
+        return payRate * workedHours;
+      default:
+        return salaryMonthly / 30 * attendance.length;
+    }
+  }
+
+  double get totalTips => tips.fold(0, (s, t) => s + t.amount);
+
+  String get payTypeLabel {
+    switch (payType) {
+      case 'daily':
+        return 'يومية';
+      case 'shift':
+        return 'بالشيفت';
+      case 'hourly':
+        return 'بالساعة';
+      default:
+        return 'شهري';
+    }
+  }
 
   /// صافي المستحق = المستحق حسب الحضور + المكافآت − الخصومات − السلف − المدفوعات.
   double get netPayable =>
@@ -290,6 +396,11 @@ class Employee {
         'deductions': deductions.map((d) => d.toJson()).toList(),
         'bonuses': bonuses.map((b) => b.toJson()).toList(),
         'notes': notes.map((n) => n.toJson()).toList(),
+        if (payType != 'monthly') 'payType': payType,
+        if (payRate != 0) 'payRate': payRate,
+        if (shiftHours != 0) 'shiftHours': shiftHours,
+        if (shiftPattern != 'fixed') 'shiftPattern': shiftPattern,
+        if (tips.isNotEmpty) 'tips': tips.map((t) => t.toJson()).toList(),
       };
 
   factory Employee.fromJson(Map<String, dynamic> j) {
@@ -313,6 +424,11 @@ class Employee {
       deductions: listOf('deductions', EmployeeDeduction.fromJson),
       bonuses: listOf('bonuses', EmployeeBonus.fromJson),
       notes: listOf('notes', EmployeeNote.fromJson),
+      payType: j['payType'] ?? 'monthly',
+      payRate: (j['payRate'] as num?)?.toDouble() ?? 0,
+      shiftHours: (j['shiftHours'] as num?)?.toInt() ?? 0,
+      shiftPattern: j['shiftPattern'] ?? 'fixed',
+      tips: listOf('tips', EmployeeTip.fromJson),
     );
   }
 }

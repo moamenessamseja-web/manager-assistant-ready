@@ -195,6 +195,17 @@ class _S extends State<EmployeeDetailsScreen> {
             id: const Uuid().v4(), amount: v, reason: reason, date: DateTime.now())),
       );
 
+  Future<void> _addTip() => _amountSheet(
+        title: 'إكرامية لـ ${e.name}',
+        label: 'قيمة الإكرامية (ج)',
+        historyLabel: 'سجل الإكراميات (منفصلة عن الأجر)',
+        entries: e.tips
+            .map((t) => '${money(t.amount)} — ${arabicDateTime(t.date)}')
+            .toList(),
+        onAdd: (v, note) => e.tips
+            .add(EmployeeTip(id: const Uuid().v4(), amount: v, date: DateTime.now(), note: note)),
+      );
+
   Future<void> _addNote() async {
     final t = TextEditingController();
     await showAppBottomSheet<void>(
@@ -242,6 +253,11 @@ class _S extends State<EmployeeDetailsScreen> {
     final addr = TextEditingController(text: e.address);
     final idn = TextEditingController(text: e.idNumber);
     var start = e.startDate;
+    var payType = e.payType;
+    var shiftHours = e.shiftHours;
+    var shiftPattern = e.shiftPattern;
+    final rate = TextEditingController(
+        text: e.payRate == 0 ? '' : e.payRate.toStringAsFixed(e.payRate == e.payRate.roundToDouble() ? 0 : 2));
 
     await showAppBottomSheet<void>(
       context: context,
@@ -256,10 +272,55 @@ class _S extends State<EmployeeDetailsScreen> {
               const SizedBox(height: AppSpace.x3),
               TextField(controller: r, decoration: const InputDecoration(labelText: 'الوظيفة')),
               const SizedBox(height: AppSpace.x3),
-              TextField(
-                controller: s,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'المرتب الشهري (ج)'),
+              DropdownButtonFormField<String>(
+                initialValue: payType,
+                decoration: const InputDecoration(labelText: 'طريقة الأجر'),
+                items: const [
+                  DropdownMenuItem(value: 'monthly', child: Text('شهري')),
+                  DropdownMenuItem(value: 'daily', child: Text('يومية')),
+                  DropdownMenuItem(value: 'shift', child: Text('بالشيفت')),
+                  DropdownMenuItem(value: 'hourly', child: Text('بالساعة')),
+                ],
+                onChanged: (v) => setSheet(() => payType = v ?? 'monthly'),
+              ),
+              const SizedBox(height: AppSpace.x3),
+              if (payType == 'monthly')
+                TextField(
+                  controller: s,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'المرتب الشهري (ج)'),
+                )
+              else
+                TextField(
+                  controller: rate,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(
+                      labelText: payType == 'daily'
+                          ? 'اليومية (ج)'
+                          : payType == 'shift'
+                              ? 'سعر الشيفت (ج)'
+                              : 'سعر الساعة (ج)'),
+                ),
+              const SizedBox(height: AppSpace.x3),
+              DropdownButtonFormField<int>(
+                initialValue: shiftHours,
+                decoration: const InputDecoration(labelText: 'طول الشيفت (جدول الشغل — منفصل عن الأجر)'),
+                items: const [
+                  DropdownMenuItem(value: 0, child: Text('غير محدد')),
+                  DropdownMenuItem(value: 8, child: Text('٨ ساعات')),
+                  DropdownMenuItem(value: 12, child: Text('١٢ ساعة')),
+                ],
+                onChanged: (v) => setSheet(() => shiftHours = v ?? 0),
+              ),
+              const SizedBox(height: AppSpace.x3),
+              DropdownButtonFormField<String>(
+                initialValue: shiftPattern,
+                decoration: const InputDecoration(labelText: 'نمط الشيفت'),
+                items: const [
+                  DropdownMenuItem(value: 'fixed', child: Text('ثابت')),
+                  DropdownMenuItem(value: 'rotating', child: Text('متناوب')),
+                ],
+                onChanged: (v) => setSheet(() => shiftPattern = v ?? 'fixed'),
               ),
               const SizedBox(height: AppSpace.x3),
               TextField(
@@ -298,7 +359,20 @@ class _S extends State<EmployeeDetailsScreen> {
                 onPressed: () async {
                   e.name = n.text.trim().isEmpty ? e.name : n.text.trim();
                   e.role = r.text.trim();
-                  e.salaryMonthly = double.tryParse(s.text.trim()) ?? e.salaryMonthly;
+                  if (payType == 'monthly') {
+                    e.salaryMonthly = double.tryParse(s.text.trim()) ?? e.salaryMonthly;
+                  } else {
+                    final pr = double.tryParse(rate.text.trim());
+                    if (pr == null || pr <= 0) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('اكتب السعر (أكبر من صفر) عشان يتحسب الأجر.')));
+                      return;
+                    }
+                    e.payRate = pr;
+                  }
+                  e.payType = payType;
+                  e.shiftHours = shiftHours;
+                  e.shiftPattern = shiftPattern;
                   e.phone = phone.text.trim();
                   e.address = addr.text.trim();
                   e.idNumber = idn.text.trim();
@@ -473,7 +547,7 @@ class _S extends State<EmployeeDetailsScreen> {
           ),
           const SizedBox(height: AppSpace.x4),
           Row(children: [
-            _stat('المرتب', money(e.salaryMonthly, suffix: ''), AppColors.primary),
+            _stat(e.isMonthly ? 'المرتب' : e.payTypeLabel, money(e.isMonthly ? e.salaryMonthly : e.payRate, suffix: ''), AppColors.primary),
             _stat('حضور', '${e.attendance.length} يوم', AppColors.success),
             _stat('السلف', money(e.totalAdvances, suffix: ''), AppColors.warning),
           ]),
@@ -612,6 +686,13 @@ class _S extends State<EmployeeDetailsScreen> {
           _act(Icons.card_giftcard_outlined, 'مكافأة', AppColors.accent, _addBonus),
           _act(Icons.sticky_note_2_outlined, 'ملاحظة', AppColors.info, _addNote),
           _act(Icons.edit_outlined, 'تعديل', AppColors.primary, _editDialog),
+        ]),
+        const SizedBox(height: AppSpace.x3),
+        Row(children: [
+          _act(Icons.volunteer_activism_outlined, 'إكرامية', AppColors.success, _addTip),
+          const Expanded(child: SizedBox()),
+          const Expanded(child: SizedBox()),
+          const Expanded(child: SizedBox()),
         ]),
       ]);
 
@@ -963,7 +1044,7 @@ class _S extends State<EmployeeDetailsScreen> {
           child: Column(children: [
             _infoRow('الاسم', e.name),
             _infoRow('الوظيفة', e.role.isEmpty ? '—' : e.role),
-            _infoRow('المرتب الشهري', money(e.salaryMonthly)),
+            _infoRow(e.isMonthly ? 'المرتب الشهري' : 'طريقة الأجر (${e.payTypeLabel})', money(e.isMonthly ? e.salaryMonthly : e.payRate)),
             _infoRow('تاريخ بداية العمل', arabicDate(e.startDate)),
             _infoRow('التليفون', e.phone.isEmpty ? '—' : e.phone),
             _infoRow('العنوان', e.address.isEmpty ? '—' : e.address),
