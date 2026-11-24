@@ -115,3 +115,11 @@ ProGuard rules, re-writing Memory/Weekly Brief — all verified as already worki
   `NSSpeechRecognitionUsageDescription` injected and read back by PlistBuddy, `flutter build ios --release
   --no-codesign` ✅. This is a **compile check only** — no device, no Arabic speech test, no notifications test,
   no App Store readiness claim.
+
+## Field-driven branch verification — 2026-11-24
+
+- Branch base verified: `feature/field-driven-v2` at `052c96cad8127a90f60cda4f33778a75c6089924`; implementation branch created from that ref.
+- Static source audit confirmed SharedPreferences persistence and existing implementations for backup/restore, shift/day closing, shortages, café identity, terminology, and audit records.
+- Run #99: `flutter analyze` passed; test suite reported 256 passed / 8 failed. Failure causes included `pumpAndSettle` timeouts, lazy `ListView` sections asserted before scrolling, and an obsolete test expectation that settings had no text field despite the required café-name field.
+- Follow-up commits stabilize those tests and add daily shift-breakdown coverage. Run #100 checked out commit `eeb764b`, earlier than the final follow-up test commits; it cannot certify the latest HEAD.
+- Latest branch verification: PENDING. No APK is claimed as produced or verified from the final branch state. Physical device verification is also pending.
