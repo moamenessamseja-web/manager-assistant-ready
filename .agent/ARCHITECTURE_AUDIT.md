@@ -57,3 +57,12 @@
   refuse debug signing and refuse an unexpected signer when `EXPECTED_SIGNER_SHA256` is set.
 - Risk: the Android project is generated in CI and patched by shell appends; any Flutter template change can break
   the patches. The guard steps and the selftest exist to catch that early.
+
+## Session 6 — field-driven branch audit (2026-11-24)
+
+- Starting ref: `feature/field-driven-v2` @ `052c96c`; work branch created from this exact ref.
+- Confirmed actual persistence remains `SharedPreferences` with JSON-serialized entity lists and scalar settings. No database replacement was introduced.
+- Confirmed current services/models cover backup snapshot validation + SHA-256, safety backup + rollback, shift snapshots, optional daily closing over shift snapshots, shortages, café profile, and audit log.
+- Daily closing detail was improved to expand each shift into its full financial totals breakdown.
+- Existing design caveat retained for follow-up: `ShiftTotals` records the financial categories present in the current data model; this is not a full accounting/profit engine. Reports must continue labeling net cash movement as cash movement, not profit.
+- Latest CI status is pending; run #99 had 8 widget failures after analyze passed, and run #100 predates the last test fixes. See `VERIFICATION_REPORT.md`.
