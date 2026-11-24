@@ -121,12 +121,30 @@ class _ShiftsScreenState extends State<ShiftsScreen> {
           const SizedBox(height: AppSpace.x3),
           Text('الشيفتات (${shifts.length})', style: AppText.label),
           for (final s in shifts)
-            ListTile(
-              dense: true,
-              title: Text(s.name),
-              subtitle: Text(s.isClosed ? '${_m(s.snapshot?.netCashMovement ?? 0)} صافي حركة الكاش' : 'مفتوح'),
-              trailing: Text(s.isClosed ? 'مقفول' : 'مفتوح'),
-              onTap: () => _shiftDetail(s),
+            Card(
+              margin: const EdgeInsets.only(bottom: AppSpace.x2),
+              child: ExpansionTile(
+                tilePadding: const EdgeInsets.symmetric(horizontal: AppSpace.x3),
+                title: Text(s.name),
+                subtitle: Text(s.isClosed
+                    ? '${_m(s.snapshot?.netCashMovement ?? 0)} صافي حركة الكاش · مقفول'
+                    : 'مفتوح'),
+                childrenPadding: const EdgeInsets.fromLTRB(
+                    AppSpace.x3, 0, AppSpace.x3, AppSpace.x3),
+                children: [
+                  if (s.isClosed)
+                    TotalsView(totals: s.snapshot ?? const ShiftTotals(), shift: s)
+                  else
+                    TotalsView(totals: _live(s), shift: s),
+                  Align(
+                    alignment: AlignmentDirectional.centerEnd,
+                    child: TextButton(
+                      onPressed: () => _shiftDetail(s),
+                      child: const Text('عرض تفاصيل الوردية'),
+                    ),
+                  ),
+                ],
+              ),
             ),
           const Divider(),
           Text('إجمالي اليوم (مجموع لقطات الشيفتات)', style: AppText.label),
