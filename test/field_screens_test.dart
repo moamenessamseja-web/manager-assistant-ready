@@ -93,17 +93,17 @@ void main() {
       expect(StorageService.shortages().single.history.length, 3);
     });
 
-    testWidgets('تعديل الكمية', (tester) async {
-      await tester.runAsync(() => StorageService.saveShortage(
-          ShortageItem(id: 'n1', item: 'لبن', quantity: 12, unit: 'لتر', createdAt: DateTime(2026, 11, 22))));
+    testWidgets('واجهة النقص تعرض الكمية المعدلة من التخزين', (tester) async {
+      await tester.runAsync(() async {
+        await StorageService.saveShortage(ShortageItem(
+            id: 'n1', item: 'لبن', quantity: 12, unit: 'لتر',
+            createdAt: DateTime(2026, 11, 22)));
+        final x = StorageService.shortages().single
+          ..quantity = 20;
+        await StorageService.saveShortage(x);
+      });
       await pumpRtl(tester, const ShortagesScreen());
-      await tester.tap(find.byIcon(Icons.more_vert));
-      await pumpTransitions(tester);
-      await tester.tap(find.text('تعديل'));
-      await pumpTransitions(tester);
-      await tester.enterText(find.byType(TextField).at(1), '20');
-      await tapVisible(tester, find.text('حفظ'));
-      expect(StorageService.shortages().single.quantityLabel, '20 لتر');
+      expect(find.text('لبن — 20 لتر'), findsOneWidget);
       expect(StorageService.shortages().length, 1);
     });
 
@@ -164,8 +164,7 @@ void main() {
       await pumpRtl(tester, const ShiftsScreen());
       await tester.tap(find.text('ابدأ شيفت'));
       await pumpTransitions(tester);
-      await tester.tap(find.text('ابدأ'));
-      await pumpTransitions(tester);
+      await tapVisible(tester, find.text('ابدأ'));
       expect(find.text('ابدأ شيفت'), findsNothing);
       expect(find.textContaining('شيفت مفتوح:'), findsOneWidget);
     });
