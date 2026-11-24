@@ -123,3 +123,8 @@ ProGuard rules, re-writing Memory/Weekly Brief — all verified as already worki
 - Run #99: `flutter analyze` passed; test suite reported 256 passed / 8 failed. Failure causes included `pumpAndSettle` timeouts, lazy `ListView` sections asserted before scrolling, and an obsolete test expectation that settings had no text field despite the required café-name field.
 - Follow-up commits stabilize those tests and add daily shift-breakdown coverage. Run #100 checked out commit `eeb764b`, earlier than the final follow-up test commits; it cannot certify the latest HEAD.
 - Latest branch verification: PENDING. No APK is claimed as produced or verified from the final branch state. Physical device verification is also pending.
+
+### Follow-up run #106 (2026-11-24)
+- Checked out `8e8e509` and ran `flutter analyze` successfully.
+- Widget suite: 258 passed / 6 failed. The remaining failures exposed off-screen bottom-sheet save buttons in 360px widget tests, a popup-menu hit-test dependency, and an assertion matching explanatory offline copy rather than an API-key input.
+- Follow-up test commits now scroll save actions into view, verify shortage transitions through persisted model state (covered separately by shortage lifecycle tests), remove popup-route hit-testing from the edit-display test, and assert only the actual settings input count. These changes are not yet verified by CI.
