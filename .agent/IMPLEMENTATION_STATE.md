@@ -558,3 +558,6 @@ logo, internal design, start page + password login.
 - Review full transaction correction coverage for every editable/deletable financial record.
 - Validate restore/export and logo/photo paths on a physical Android device.
 - No merge to `main` without owner approval.
+
+### Verification update
+- Run #106 on commit `8e8e509`: analyze passed; 258 tests passed, 6 failed. Failures were in field-screen widget interaction tests (save actions outside the 360px viewport, popup menu hit-testing) and a settings assertion that incorrectly matched descriptive offline copy. Follow-up fixes are committed after that run; latest CI is still required.
