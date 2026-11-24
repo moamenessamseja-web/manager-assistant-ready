@@ -62,5 +62,8 @@ Future<T?> showFormSheet<T>(BuildContext context, Widget child) => showModalBott
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.85,
+      ),
       builder: (_) => child,
     );
