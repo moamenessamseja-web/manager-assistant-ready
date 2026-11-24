@@ -162,8 +162,9 @@ void main() {
     testWidgets('شاشة الإعدادات مفيهاش أي حقل لمفتاح API', (tester) async {
       await tester.pumpWidget(const MaterialApp(home: SettingsScreen()));
       await tester.pumpAndSettle();
-      expect(find.byType(TextField), findsNothing);
+      expect(find.widgetWithText(TextField, 'اسم الكافيه'), findsOneWidget);
       expect(find.textContaining('Gemini'), findsNothing);
+      expect(find.textContaining('مفتاح API'), findsNothing);
     });
   });
 }
