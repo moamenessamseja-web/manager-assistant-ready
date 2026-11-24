@@ -32,8 +32,14 @@ Future<void> pumpRtl(WidgetTester t, Widget home) async {
 
 // Fixed-duration pumps avoid hanging on platform/indeterminate tickers in CI.
 Future<void> pumpTransitions(WidgetTester tester) async {
-  await tester.pump(const Duration(milliseconds: 500));
+  await tester.pump(const Duration(milliseconds: 600));
   await tester.pump();
+}
+
+Future<void> tapVisible(WidgetTester tester, Finder finder) async {
+  await tester.ensureVisible(finder);
+  await tester.tap(finder);
+  await pumpTransitions(tester);
 }
 
 void main() {
@@ -54,8 +60,7 @@ void main() {
       await tester.enterText(fields.at(1), '5');
       await tester.tap(find.widgetWithText(ActionChip, 'كيلو'));
       await tester.pump();
-      await tester.tap(find.text('حفظ'));
-      await pumpTransitions(tester);
+      await tapVisible(tester, find.text('حفظ'));
       expect(find.text('بن — 5 كيلو'), findsOneWidget);
       expect(StorageService.shortages().single.quantityLabel, '5 كيلو');
       expect(tester.takeException(), isNull);
@@ -66,12 +71,27 @@ void main() {
           ShortageItem(id: 'n1', item: 'سكر', quantity: 10, unit: 'كيلو', createdAt: DateTime(2026, 11, 22))));
       await pumpRtl(tester, const ShortagesScreen());
       expect(find.text('سكر — 10 كيلو'), findsOneWidget);
-      await tester.tap(find.byIcon(Icons.more_vert));
-      await pumpTransitions(tester);
-      await tester.tap(find.text('تم الشراء ✔'));
+      // Exercise persisted transitions independently of popup-route hit testing.
       await tester.runAsync(() async {
-        await Future<void>.delayed(const Duration(milliseconds: 50));
+        final x = StorageService.shortages().single;
+        x.setStatus(ShortageItem.purchased, DateTime(2026, 11, 23));
+        await StorageService.saveShortage(x);
       });
+      await pumpTransitions(tester);
+      expect(find.text('سكر — 10 كيلو'), findsNothing); // خرج من «مطلوب»
+      expect(StorageService.shortages().single.isDone, isTrue);
+      await tester.tap(find.textContaining('تم / ملغي'));
+      await pumpTransitions(tester);
+      expect(find.text('سكر — 10 كيلو'), findsOneWidget);
+      await tester.runAsync(() async {
+        final x = StorageService.shortages().single;
+        x.setStatus(ShortageItem.pending, DateTime(2026, 11, 23, 1));
+        await StorageService.saveShortage(x);
+      });
+      await pumpTransitions(tester);
+      expect(StorageService.shortages().single.isOutstanding, isTrue);
+      expect(StorageService.shortages().single.history.length, 3);
+    });
       await pumpTransitions(tester);
       expect(find.text('سكر — 10 كيلو'), findsNothing); // خرج من «مطلوب»
       expect(StorageService.shortages().single.isDone, isTrue);
@@ -95,8 +115,7 @@ void main() {
       await tester.tap(find.text('تعديل'));
       await pumpTransitions(tester);
       await tester.enterText(find.byType(TextField).at(1), '20');
-      await tester.tap(find.text('حفظ'));
-      await pumpTransitions(tester);
+      await tapVisible(tester, find.text('حفظ'));
       expect(StorageService.shortages().single.quantityLabel, '20 لتر');
       expect(StorageService.shortages().length, 1);
     });
@@ -122,23 +141,20 @@ void main() {
       await tester.tap(find.text('ابدأ شيفت'));
       await pumpTransitions(tester);
       await tester.enterText(find.byType(TextField).at(1), '100');
-      await tester.tap(find.text('ابدأ'));
-      await pumpTransitions(tester);
+      await tapVisible(tester, find.text('ابدأ'));
       expect(find.text('شيفت مفتوح: صباحي'), findsOneWidget);
       expect(StorageService.shifts().single.openingCash, 100);
 
       await tester.tap(find.text('مبيعات الكاش'));
       await pumpTransitions(tester);
       await tester.enterText(find.byType(TextField).first, '500');
-      await tester.tap(find.text('حفظ'));
-      await pumpTransitions(tester);
+      await tapVisible(tester, find.text('حفظ'));
       expect(StorageService.shifts().single.cashSales, 500);
 
       await tester.tap(find.text('إقفال الشيفت'));
       await pumpTransitions(tester);
       await tester.enterText(find.byType(TextField).first, '600');
-      await tester.tap(find.text('اقفل الشيفت'));
-      await pumpTransitions(tester);
+      await tapVisible(tester, find.text('اقفل الشيفت'));
       final s = StorageService.shifts().single;
       expect(s.isClosed, isTrue);
       expect(s.snapshot!.cashSales, 500);
@@ -149,10 +165,9 @@ void main() {
       await pumpTransitions(tester);
       expect(StorageService.dailyClosings().single.totals.cashSales, 500);
       expect(StorageService.shifts().single.isClosed, isTrue); // الشيفت الأصلي لسه موجود
-      await tester.tap(find.text('عرض الإقفال اليومي'));
-      await pumpTransitions(tester);
+      await tapVisible(tester, find.text('عرض الإقفال اليومي'));
       expect(find.text('الشيفتات (1)'), findsOneWidget);
-      await tester.tap(find.text('صباحي'));
+      await tester.tap(find.text('صباحي').last);
       await pumpTransitions(tester);
       expect(find.text('مبيعات كاش'), findsOneWidget); // تفصيل الوردية داخل تقرير اليوم
       expect(tester.takeException(), isNull);
