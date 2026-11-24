@@ -87,3 +87,12 @@ has simply never existed — neither is an accidental deletion).
 GitHub classic PAT used this session for clone/push/Actions-API access was supplied inline in
 chat. **Rotate/revoke it** once you no longer need it from this exact token — it was never
 written into any file in this repo, only used directly against the GitHub API/git remote URL.
+
+## SESSION 6 UPDATE — 2026-11-24
+
+- Active branch: `feature/field-driven-v2-implementation` (created from `feature/field-driven-v2`, not `main`).
+- The field-driven requirements are being audited against existing code. Backup/restore, shift/day closing, shortages, café branding, Arabic terminology, and audit logging already existed at branch start and were preserved.
+- New UI adjustment: daily-closing detail now expands each shift to show its individual financial breakdown as well as the consolidated total.
+- Widget tests were corrected for lazy lists, current settings fields, async persistence, and non-settling animations.
+- CI run #99 analyzed successfully but had 8 widget failures (256 passed); fixes were committed afterward. Run #100 checked out an earlier branch commit than the latest test changes. A fresh run against the latest branch head is required before claiming verification or delivering an APK.
+- Do not merge into `main` without explicit owner approval.
