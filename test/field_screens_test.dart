@@ -149,6 +149,10 @@ void main() {
       await pumpTransitions(tester);
       expect(StorageService.dailyClosings().single.totals.cashSales, 500);
       expect(StorageService.shifts().single.isClosed, isTrue); // الشيفت الأصلي لسه موجود
+      await tester.tap(find.text('عرض الإقفال اليومي'));
+      await pumpTransitions(tester);
+      expect(find.text('الشيفتات (1)'), findsOneWidget);
+      expect(find.text('مبيعات كاش'), findsOneWidget); // تفصيل الوردية داخل تقرير اليوم
       expect(tester.takeException(), isNull);
     });
 
