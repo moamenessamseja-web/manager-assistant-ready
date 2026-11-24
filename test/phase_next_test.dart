@@ -151,8 +151,11 @@ void main() {
       await tester.pumpWidget(const MaterialApp(home: InstructionsScreen()));
       expect(find.text('تعليمات الاستخدام'), findsOneWidget);
       expect(find.text('الكميات والوحدات'), findsOneWidget);
+      // القائمة طويلة (ListView كسول): نمرّر للقسم قبل التحقق منه.
+      await tester.scrollUntilVisible(
+          find.text('التذكيرات والالتزامات'), 300,
+          scrollable: find.byType(Scrollable).first);
       expect(find.text('التذكيرات والالتزامات'), findsOneWidget);
-      // القائمة طويلة (ListView كسول): نمرّر لآخر قسم قبل ما نتحقق منه.
       await tester.scrollUntilVisible(
           find.text('إيه اللي بيشتغل من غير إنترنت؟'), 300,
           scrollable: find.byType(Scrollable).first);
