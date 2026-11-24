@@ -30,6 +30,12 @@ Future<void> pumpRtl(WidgetTester t, Widget home) async {
   await t.pump();
 }
 
+// Fixed-duration pumps avoid hanging on platform/indeterminate tickers in CI.
+Future<void> pumpTransitions(WidgetTester tester) async {
+  await tester.pump(const Duration(milliseconds: 500));
+  await tester.pump();
+}
+
 void main() {
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
@@ -42,14 +48,14 @@ void main() {
       await pumpRtl(tester, const ShortagesScreen());
       expect(find.text('مفيش نواقص دلوقتي'), findsOneWidget);
       await tester.tap(find.text('إضافة نقص'));
-      await tester.pumpAndSettle();
+      await pumpTransitions(tester);
       final fields = find.byType(TextField);
       await tester.enterText(fields.at(0), 'بن');
       await tester.enterText(fields.at(1), '5');
       await tester.tap(find.widgetWithText(ActionChip, 'كيلو'));
       await tester.pump();
       await tester.tap(find.text('حفظ'));
-      await tester.pumpAndSettle();
+      await pumpTransitions(tester);
       expect(find.text('بن — 5 كيلو'), findsOneWidget);
       expect(StorageService.shortages().single.quantityLabel, '5 كيلو');
       expect(tester.takeException(), isNull);
@@ -61,18 +67,21 @@ void main() {
       await pumpRtl(tester, const ShortagesScreen());
       expect(find.text('سكر — 10 كيلو'), findsOneWidget);
       await tester.tap(find.byIcon(Icons.more_vert));
-      await tester.pumpAndSettle();
+      await pumpTransitions(tester);
       await tester.tap(find.text('تم الشراء ✔'));
-      await tester.pumpAndSettle();
+      await tester.runAsync(() async {
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+      });
+      await pumpTransitions(tester);
       expect(find.text('سكر — 10 كيلو'), findsNothing); // خرج من «مطلوب»
       expect(StorageService.shortages().single.isDone, isTrue);
       await tester.tap(find.textContaining('تم / ملغي'));
-      await tester.pumpAndSettle();
+      await pumpTransitions(tester);
       expect(find.text('سكر — 10 كيلو'), findsOneWidget);
       await tester.tap(find.byIcon(Icons.more_vert));
-      await tester.pumpAndSettle();
+      await pumpTransitions(tester);
       await tester.tap(find.text('إعادة فتح (مطلوب)'));
-      await tester.pumpAndSettle();
+      await pumpTransitions(tester);
       expect(StorageService.shortages().single.isOutstanding, isTrue);
       expect(StorageService.shortages().single.history.length, 3);
     });
@@ -82,12 +91,12 @@ void main() {
           ShortageItem(id: 'n1', item: 'لبن', quantity: 12, unit: 'لتر', createdAt: DateTime(2026, 11, 22))));
       await pumpRtl(tester, const ShortagesScreen());
       await tester.tap(find.byIcon(Icons.more_vert));
-      await tester.pumpAndSettle();
+      await pumpTransitions(tester);
       await tester.tap(find.text('تعديل'));
-      await tester.pumpAndSettle();
+      await pumpTransitions(tester);
       await tester.enterText(find.byType(TextField).at(1), '20');
       await tester.tap(find.text('حفظ'));
-      await tester.pumpAndSettle();
+      await pumpTransitions(tester);
       expect(StorageService.shortages().single.quantityLabel, '20 لتر');
       expect(StorageService.shortages().length, 1);
     });
@@ -111,25 +120,25 @@ void main() {
       await pumpRtl(tester, const ShiftsScreen());
       expect(find.text('مفيش شيفت مفتوح'), findsOneWidget);
       await tester.tap(find.text('ابدأ شيفت'));
-      await tester.pumpAndSettle();
+      await pumpTransitions(tester);
       await tester.enterText(find.byType(TextField).at(1), '100');
       await tester.tap(find.text('ابدأ'));
-      await tester.pumpAndSettle();
+      await pumpTransitions(tester);
       expect(find.text('شيفت مفتوح: صباحي'), findsOneWidget);
       expect(StorageService.shifts().single.openingCash, 100);
 
       await tester.tap(find.text('مبيعات الكاش'));
-      await tester.pumpAndSettle();
+      await pumpTransitions(tester);
       await tester.enterText(find.byType(TextField).first, '500');
       await tester.tap(find.text('حفظ'));
-      await tester.pumpAndSettle();
+      await pumpTransitions(tester);
       expect(StorageService.shifts().single.cashSales, 500);
 
       await tester.tap(find.text('إقفال الشيفت'));
-      await tester.pumpAndSettle();
+      await pumpTransitions(tester);
       await tester.enterText(find.byType(TextField).first, '600');
       await tester.tap(find.text('اقفل الشيفت'));
-      await tester.pumpAndSettle();
+      await pumpTransitions(tester);
       final s = StorageService.shifts().single;
       expect(s.isClosed, isTrue);
       expect(s.snapshot!.cashSales, 500);
@@ -137,7 +146,7 @@ void main() {
 
       expect(find.text('إقفال اليوم (اختياري)'), findsOneWidget);
       await tester.tap(find.text('إقفال اليوم (اختياري)'));
-      await tester.pumpAndSettle();
+      await pumpTransitions(tester);
       expect(StorageService.dailyClosings().single.totals.cashSales, 500);
       expect(StorageService.shifts().single.isClosed, isTrue); // الشيفت الأصلي لسه موجود
       expect(tester.takeException(), isNull);
@@ -146,9 +155,9 @@ void main() {
     testWidgets('ماينفعش فتح شيفتين: الزرار بيختفي والشيفت المفتوح بيظهر', (tester) async {
       await pumpRtl(tester, const ShiftsScreen());
       await tester.tap(find.text('ابدأ شيفت'));
-      await tester.pumpAndSettle();
+      await pumpTransitions(tester);
       await tester.tap(find.text('ابدأ'));
-      await tester.pumpAndSettle();
+      await pumpTransitions(tester);
       expect(find.text('ابدأ شيفت'), findsNothing);
       expect(find.textContaining('شيفت مفتوح:'), findsOneWidget);
     });
@@ -182,7 +191,7 @@ void main() {
       await pumpRtl(tester, const SettingsScreen());
       await tester.enterText(find.widgetWithText(TextField, 'اسم الكافيه'), 'كافيه النيل');
       await tester.tap(find.text('حفظ الاسم'));
-      await tester.pumpAndSettle();
+      await pumpTransitions(tester);
       expect(CafeProfileService.displayName, 'كافيه النيل');
       await tester.runAsync(() => CafeProfileService.init());
       expect(CafeProfileService.displayName, 'كافيه النيل');
@@ -230,6 +239,9 @@ void main() {
       expect(find.text('تقرير الأسبوع'), findsOneWidget);
       expect(find.text('بريف الأسبوع'), findsNothing);
       expect(find.text('الوضع المالي'), findsOneWidget);
+      await tester.scrollUntilVisible(
+          find.text('حركة الكاش من الإقفالات (هذا الأسبوع)'), 300,
+          scrollable: find.byType(Scrollable).first);
       expect(find.text('حركة الكاش من الإقفالات (هذا الأسبوع)'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
