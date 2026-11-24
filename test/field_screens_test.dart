@@ -37,10 +37,17 @@ Future<void> pumpTransitions(WidgetTester tester) async {
 }
 
 Future<void> tapVisible(WidgetTester tester, Finder finder) async {
-  // Modal FormSheet scrollables are not reliably moved by ensureVisible in tests.
-  final scrollable = find.ancestor(
-      of: finder, matching: find.byType(Scrollable)).first;
-  await tester.dragUntilVisible(finder, scrollable, const Offset(0, -300));
+  // First ask the nearest scrollable to reveal the control. If it is still
+  // outside the hit-testable viewport (e.g. a keyboard-resized modal sheet),
+  // continue scrolling that same scrollable until the control is actionable.
+  final scrollable =
+      find.ancestor(of: finder, matching: find.byType(Scrollable)).first;
+  await tester.ensureVisible(finder);
+  await tester.pump();
+  if (finder.hitTestable().evaluate().isEmpty) {
+    await tester.dragUntilVisible(finder, scrollable, const Offset(0, -240));
+    await tester.pump();
+  }
   await tester.tap(finder);
   await pumpTransitions(tester);
 }
@@ -61,7 +68,7 @@ void main() {
       final fields = find.byType(TextField);
       await tester.enterText(fields.at(0), 'بن');
       await tester.enterText(fields.at(1), '5');
-      await tester.tap(find.widgetWithText(ActionChip, 'كيلو'));
+      await tapVisible(tester, find.widgetWithText(ActionChip, 'كيلو'));
       await tester.pump();
       await tapVisible(tester, find.text('حفظ'));
       expect(find.text('بن — 5 كيلو'), findsOneWidget);
@@ -128,20 +135,20 @@ void main() {
     testWidgets('ابدأ شيفت ← مبيعات كاش ← إقفال بالمعدود ← إقفال اليوم', (tester) async {
       await pumpRtl(tester, const ShiftsScreen());
       expect(find.text('مفيش شيفت مفتوح'), findsOneWidget);
-      await tester.tap(find.text('ابدأ شيفت'));
+      await tapVisible(tester, find.text('ابدأ شيفت'));
       await pumpTransitions(tester);
       await tester.enterText(find.byType(TextField).at(1), '100');
       await tapVisible(tester, find.text('ابدأ'));
       expect(find.text('شيفت مفتوح: صباحي'), findsOneWidget);
       expect(StorageService.shifts().single.openingCash, 100);
 
-      await tester.tap(find.text('مبيعات الكاش'));
+      await tapVisible(tester, find.text('مبيعات الكاش'));
       await pumpTransitions(tester);
       await tester.enterText(find.byType(TextField).first, '500');
       await tapVisible(tester, find.text('حفظ'));
       expect(StorageService.shifts().single.cashSales, 500);
 
-      await tester.tap(find.text('إقفال الشيفت'));
+      await tapVisible(tester, find.text('إقفال الشيفت'));
       await pumpTransitions(tester);
       await tester.enterText(find.byType(TextField).first, '600');
       await tapVisible(tester, find.text('اقفل الشيفت'));
@@ -151,7 +158,7 @@ void main() {
       expect(s.variance(s.snapshot!), 0); // 100 + 500 = 600 معدود
 
       expect(find.text('إقفال اليوم (اختياري)'), findsOneWidget);
-      await tester.tap(find.text('إقفال اليوم (اختياري)'));
+      await tapVisible(tester, find.text('إقفال اليوم (اختياري)'));
       await pumpTransitions(tester);
       expect(StorageService.dailyClosings().single.totals.cashSales, 500);
       expect(StorageService.shifts().single.isClosed, isTrue); // الشيفت الأصلي لسه موجود
