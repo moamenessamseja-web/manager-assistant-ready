@@ -100,3 +100,13 @@ toolchain fingerprint — Implemented, not yet verified.
 - `lib/screens`: brief (receivables section), instructions (customers), employee details (pay type, shifts, tips),
   chat (voice fills the field only).
 - `.github/workflows/build-apk.yml`, `ios-compat.yml`, `tool/ios_inject_plist.sh`, `codemagic.yaml`.
+
+## Field-driven deployment work — 2026-11-24
+
+Working branch: `feature/field-driven-v2-implementation`, based directly on `feature/field-driven-v2` (`052c96c`).
+
+The branch audit confirmed SharedPreferences as the persistence layer and found the major requested capabilities already present: validated backup/restore with safety backup, independent shift close plus optional business-day consolidation, shortage tracking, local café profile/logo, renamed Arabic navigation terminology, and financial audit entries. These existing systems were retained.
+
+New implementation: daily-closing detail now exposes an expandable full `TotalsView` for every shift, not only a single net-cash line. UI tests were updated to cover the individual shift breakdown and to avoid flaky lazy-list/animation timing assumptions.
+
+Verification must be read from the CI run against the latest branch HEAD. Run #99 is not green (analyze passed; 256 tests passed, 8 failed). Run #100 targeted an earlier commit than the final follow-up changes. Do not report a verified APK until a fresh run on the final HEAD passes.
