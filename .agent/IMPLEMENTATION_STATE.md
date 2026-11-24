@@ -531,3 +531,30 @@ CI lessons (important for any future widget tests): (1) inside `testWidgets` a s
 Next: owner device-test build-92 → merge to main on OK; chat intents for customers (`add_customer`, `customer_sale`, `customer_payment`);
 Backup/restore; money-vs-quantity chips; repository layer; then LAST: package id + signing (owner decision). Owner's own later changes:
 logo, internal design, start page + password login.
+
+## SESSION 6 — 2026-11-24 — field-driven café deployment
+
+> Work branch: `feature/field-driven-v2-implementation`, created directly from `feature/field-driven-v2` at `052c96c`. No changes to `main`.
+
+### Baseline audit
+- Persistence is `SharedPreferences` JSON lists/scalars; no SQLite database was introduced.
+- Existing implementation already includes backup/restore (`BackupCodec`, `BackupService`, `BackupScreen`), shift and daily closing (`Shift`, `DailyClosing`, `ClosingService`, `ShiftsScreen`), shortages, café identity, terminology, and audit trail. These were preserved rather than rebuilt.
+- Existing tests include backup round-trip, financial/shift aggregation, shortage model/UI, café profile, and audit storage coverage.
+
+### Changes in this session
+- Added the daily-closing detail expansion so each shift exposes its full `TotalsView` breakdown alongside consolidated daily totals; original shift records remain intact.
+- Stabilized field-screen widget tests by replacing unbounded `pumpAndSettle` waits with bounded pumps, waiting for async shortage persistence, scrolling lazy content before assertions, and aligning the settings test with the required café-name field (not an obsolete API-key-only settings screen).
+- Added a widget assertion for per-shift detail in the daily report.
+- Enabled the existing APK workflow on this implementation branch so the final branch head receives the same analyze/test/build gates and a prerelease APK.
+
+### Verification status
+- Existing run #99 at source commit `052c96c`: `flutter analyze` passed; 256 tests passed and 8 widget tests failed. Failures were traced to outdated lazy-list assertions, obsolete settings expectations, and indeterminate-animation `pumpAndSettle` timeouts. Test corrections were committed after that run.
+- Run #100 was started by the CI-trigger commit `eeb764b`, before the final follow-up test commits; it is not evidence for the latest branch head.
+- Latest code/test commits require a fresh CI run. Do not claim a green build or successful APK until that run completes.
+- Physical-device verification remains outstanding, including backup restore with real user data and image selection/persistence.
+
+### Remaining review items
+- Confirm latest CI analyze/tests/build and inspect artifact metadata.
+- Review full transaction correction coverage for every editable/deletable financial record.
+- Validate restore/export and logo/photo paths on a physical Android device.
+- No merge to `main` without owner approval.
