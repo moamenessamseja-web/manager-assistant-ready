@@ -37,7 +37,9 @@ Future<void> pumpTransitions(WidgetTester tester) async {
 }
 
 Future<void> tapVisible(WidgetTester tester, Finder finder) async {
-  await tester.ensureVisible(finder);
+  // Modal FormSheet scrollables are not reliably moved by ensureVisible in tests.
+  await tester.dragUntilVisible(
+      finder, find.byType(Scrollable).last, const Offset(0, -300));
   await tester.tap(finder);
   await pumpTransitions(tester);
 }
