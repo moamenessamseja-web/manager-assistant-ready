@@ -87,3 +87,11 @@
 - Docs: Build 75 (`32df13f`) designated as start; Build 76 (`25dbffe`) marked untrusted (tags
   `baseline-build-75-user-confirmed`, `build-76-untrusted`).
 
+## 2026-11-24 — Field-driven implementation branch
+
+- Created `feature/field-driven-v2-implementation` from `feature/field-driven-v2` at `052c96c`.
+- Audited the existing SharedPreferences architecture and preserved implemented backup/restore, shift/day closing, shortages, café identity, terminology, and audit trail.
+- Expanded daily closing details to reveal each shift's full totals breakdown.
+- Stabilized/updated widget tests for lazy lists, asynchronous shortage status saves, settings identity fields, and bounded UI animation pumps.
+- Added branch-specific CI push trigger to run analyze, tests, APK packaging, and prerelease publication on this work branch.
+- Latest verification remains pending; earlier run #99 had 256 passing tests and 8 widget failures, with corrections committed afterward.
