@@ -8,7 +8,7 @@ on:
         type: boolean
         default: true
   push:
-    branches: [ main ]
+    branches: [ main, feature/field-driven-v2-implementation ]
 
 permissions:
   contents: write
