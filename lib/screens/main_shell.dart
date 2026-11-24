@@ -15,6 +15,12 @@ import '../services/app_state.dart';
 import '../services/storage_service.dart';
 import '../design/strings.dart';
 import 'instructions_screen.dart';
+import 'shortages_screen.dart';
+import 'shifts_screen.dart';
+import 'backup_screen.dart';
+import 'audit_log_screen.dart';
+import 'cafe_logo_image.dart';
+import '../services/cafe_profile_service.dart';
 
 /// Premium Main Shell — 6-tab bottom navigation
 /// يستمع لـ AppState عشان يبني كل الشاشات من جديد بأحدث بيانات
@@ -76,11 +82,23 @@ class _MainShellState extends State<MainShell> {
       ];
 
   // Secondary screens (from drawer)
-  List<String> get _secondaryTitles =>
-      [L.t('sec_rules'), L.t('sec_brief'), L.t('sec_settings'), L.t('sec_help')];
+  List<String> get _secondaryTitles => [
+        L.t('sec_rules'),
+        L.t('sec_brief'),
+        L.t('sec_shortages'),
+        L.t('sec_shifts'),
+        L.t('sec_backup'),
+        L.t('sec_audit'),
+        L.t('sec_settings'),
+        L.t('sec_help'),
+      ];
   static const _secondaryIcons = [
     Icons.rule,
     Icons.insights,
+    Icons.shopping_basket_outlined,
+    Icons.point_of_sale,
+    Icons.backup_outlined,
+    Icons.history,
     Icons.settings,
     Icons.help_outline
   ];
@@ -117,7 +135,7 @@ class _MainShellState extends State<MainShell> {
         title = 'المحادثة';
         break;
       case 2:
-        title = 'الذاكرة';
+        title = 'الدفتر';
         break;
       case 3:
         title = 'المستحقات';
@@ -129,7 +147,7 @@ class _MainShellState extends State<MainShell> {
         title = 'الموردين';
         break;
       default:
-        title = 'مساعد الإدارة';
+        title = CafeProfileService.displayName;
     }
 
     return AppBar(
@@ -153,6 +171,10 @@ class _MainShellState extends State<MainShell> {
     final secondary = [
       RulesScreen(key: const ValueKey('sec-rules')),
       BriefScreen(key: const ValueKey('sec-brief')),
+      ShortagesScreen(key: const ValueKey('sec-shortages')),
+      ShiftsScreen(key: const ValueKey('sec-shifts')),
+      BackupScreen(key: const ValueKey('sec-backup')),
+      AuditLogScreen(key: const ValueKey('sec-audit')),
       SettingsScreen(key: const ValueKey('sec-settings')),
       InstructionsScreen(key: const ValueKey('sec-help')),
     ];
@@ -187,19 +209,20 @@ class _MainShellState extends State<MainShell> {
                   Container(
                     width: 48,
                     height: 48,
+                    clipBehavior: Clip.antiAlias,
                     decoration: BoxDecoration(
                       color: Colors.white.withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(AppRadius.md),
                     ),
-                    child: const Icon(
-                      Icons.business_center,
+                    child: const CafeLogoImage(
+                      fallback: Icons.business_center,
                       color: Colors.white,
                       size: AppIconSize.lg,
                     ),
                   ),
                   const SizedBox(height: AppSpace.x3),
-                  Text(
-                    'مساعد الإدارة',
+                  CafeNameText(
+                    maxLines: 2,
                     style:
                         AppText.h1.copyWith(color: Colors.white, fontSize: 20),
                   ),

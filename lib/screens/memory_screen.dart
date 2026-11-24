@@ -9,7 +9,7 @@ import 'staff_screen.dart';
 import 'suppliers_screen.dart';
 import 'memory_lists.dart';
 
-/// الذاكرة — مركز معلومات العمل الحي.
+/// الدفتر — مركز معلومات العمل الحي.
 /// لما مفيش بحث: ملخص تشغيلي + خط زمني للنشاط الأخير.
 /// لما فيه بحث: نتائج من جميع الكيانات مع تنقل مباشر.
 class MemoryScreen extends StatefulWidget {
@@ -32,7 +32,7 @@ class _MemoryScreenState extends State<MemoryScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('الذاكرة')),
+      appBar: AppBar(title: const Text('الدفتر')),
       body: Column(
         children: [
           // Search bar

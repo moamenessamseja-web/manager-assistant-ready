@@ -8,10 +8,11 @@ import '../design/format.dart';
 import 'staff_screen.dart';
 import 'suppliers_screen.dart';
 import 'receivables_screen.dart';
+import '../services/closing_service.dart';
 import '../models/customer.dart';
 import 'ask_assistant.dart';
 
-/// بريف الأسبوع — ملخص تشغيلي حي.
+/// تقرير الأسبوع — ملخص تشغيلي حي.
 /// كل رقم مهم يفتح المصدر بتاعه مباشرة.
 class BriefScreen extends StatefulWidget {
   const BriefScreen({super.key});
@@ -24,7 +25,7 @@ class _BriefScreenState extends State<BriefScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('بريف الأسبوع')),
+      appBar: AppBar(title: const Text('تقرير الأسبوع')),
       body: ListenableBuilder(
         listenable: AppState.instance,
         builder: (context, _) {
@@ -60,6 +61,22 @@ class _BriefScreenState extends State<BriefScreen> {
           // الأرصدة الافتتاحية مش بتتحسب مبيعات ولا تحصيل في الأسبوع.
           final recv = receivablesSummary(StorageService.customers(),
               weekStartSaturday(now), today.add(const Duration(days: 1)));
+          // حركة الكاش المسجّلة من الشيفتات المقفولة هذا الأسبوع (من السبت) — لقطات
+          // الإقفال، فمفيش عدّ مزدوج مع حركات العملاء/الموردين فوق.
+          final dayStartHour = StorageService.prefs.getInt('business_day_start_hour') ??
+              ClosingService.defaultDayStartHour;
+          final allShifts = StorageService.shifts();
+          final weekFrom = ClosingService.businessDateOf(
+              weekStartSaturday(now).add(Duration(hours: dayStartHour)),
+              startHour: dayStartHour);
+          final weekTo = ClosingService.businessDateOf(now, startHour: dayStartHour);
+          final cashWeek = ClosingService.sumClosedBetween(allShifts, weekFrom, weekTo);
+          final closedShiftsThisWeek = allShifts
+              .where((x) =>
+                  x.isClosed &&
+                  x.businessDate.compareTo(weekFrom) >= 0 &&
+                  x.businessDate.compareTo(weekTo) <= 0)
+              .length;
           final todayStr = today.toIso8601String().substring(0, 10);
           final absent = es.where((e) => !e.attendance.contains(todayStr)).toList();
           final pendingCommitments = cs.where((x) => x.status == 'pending').toList();
@@ -69,7 +86,7 @@ class _BriefScreenState extends State<BriefScreen> {
           return ListView(
             padding: const EdgeInsets.all(AppSpace.x4),
             children: [
-              // اسأل المساعد — من البريف مباشرة
+              // اسأل المساعد — من التقرير مباشرة
               const AskAssistantBar(),
               const SizedBox(height: AppSpace.x3),
               // Summary cards row
@@ -77,7 +94,7 @@ class _BriefScreenState extends State<BriefScreen> {
                 children: [
                   Expanded(
                     child: _StatCard(
-                      '${cs.length}',
+                      '${pendingCommitments.length}',
                       'التزامات',
                       BadgeKind.info,
                     ),
@@ -104,13 +121,9 @@ class _BriefScreenState extends State<BriefScreen> {
               const SizedBox(height: AppSpace.x4),
 
               // Financial situation
-              AppSectionHeader(
-                title: 'الوضع المالي',
-                trailing: Text(
-                  '${(overdue + adv + suppliersDue).toStringAsFixed(0)} ج إجمالى',
-                  style: AppText.caption,
-                ),
-              ),
+              // ملاحظة تدقيق: اتشال رقم «إجمالي» اللي كان بيجمع مستحقات + سلف + التزامات
+              // للموردين (أصول مع التزامات = مجموع مالوش معنى). كل رقم بيتعرض لوحده.
+              AppSectionHeader(title: 'الوضع المالي'),
               AppCard(
                 padding: const EdgeInsets.all(AppSpace.x4),
                 child: Column(
@@ -182,6 +195,37 @@ class _BriefScreenState extends State<BriefScreen> {
                     ),
                   ],
                 ),
+              ),
+
+              // حركة الكاش من الإقفالات (منفصلة عن الأرصدة)
+              const SizedBox(height: AppSpace.x4),
+              AppSectionHeader(title: 'حركة الكاش من الإقفالات (هذا الأسبوع)'),
+              AppCard(
+                padding: const EdgeInsets.all(AppSpace.x4),
+                child: closedShiftsThisWeek == 0
+                    ? Text('مفيش شيفتات مقفولة هذا الأسبوع. اقفل الشيفتات من «إقفال الشيفت».',
+                        style: AppText.caption)
+                    : Column(
+                        children: [
+                          _Row(
+                            label: 'كاش داخل ($closedShiftsThisWeek شيفت مقفول)',
+                            value: '${cashWeek.cashIn.toStringAsFixed(0)} ج',
+                            badgeKind: BadgeKind.success,
+                          ),
+                          const SizedBox(height: AppSpace.x3),
+                          _Row(
+                            label: 'كاش خارج',
+                            value: '${cashWeek.cashOut.toStringAsFixed(0)} ج',
+                            badgeKind: BadgeKind.warning,
+                          ),
+                          const SizedBox(height: AppSpace.x3),
+                          _Row(
+                            label: 'صافي حركة الكاش المسجّلة (مش ربح)',
+                            value: '${cashWeek.netCashMovement.toStringAsFixed(0)} ج',
+                            badgeKind: BadgeKind.info,
+                          ),
+                        ],
+                      ),
               ),
 
               // Employees

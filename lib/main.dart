@@ -11,6 +11,7 @@ import 'services/settings_service.dart';
 import 'services/notification_prefs.dart';
 import 'services/app_error_service.dart';
 import 'services/chat_history_service.dart';
+import 'services/cafe_profile_service.dart';
 import 'screens/main_shell.dart';
 import 'design/app_theme.dart';
 import 'design/strings.dart';
@@ -25,6 +26,7 @@ Future<void> main() async {
     await ChatHistoryService.init();
     await SettingsService.init();
     await NotificationPrefs.init();
+    await CafeProfileService.init();
     tz.initializeTimeZones();
   } catch (e) {
     final msg = e.toString();

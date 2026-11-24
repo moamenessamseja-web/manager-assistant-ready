@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../models/audit_entry.dart';
+import 'void_dialog.dart';
 import '../models/supplier.dart';
 import '../services/storage_service.dart';
 import '../design/tokens.dart';
@@ -18,6 +20,37 @@ class SupplierDetailsScreen extends StatefulWidget {
 
 class _SupplierDetailsScreenState extends State<SupplierDetailsScreen> {
   late Supplier s;
+
+  /// إلغاء حركة بسبب مسجّل — الأصل بيتحفظ في سجل التصحيحات (مش حذف صامت).
+  Future<void> _voidSupplierRecord(String type, String label, double? amount, String recordId,
+      Map<String, dynamic> original, VoidCallback remove) async {
+    final sum = '$label${amount == null ? '' : ' ${amount.toStringAsFixed(0)} ج'}';
+    await voidWithAudit(
+      context,
+      title: 'إلغاء $label',
+      summary: sum,
+      entry: (id, reason, at) => AuditEntry(
+        id: id,
+        at: at,
+        action: 'void',
+        ownerType: 'supplier',
+        ownerId: s.id,
+        ownerName: s.name,
+        recordType: type,
+        recordId: recordId,
+        summary: sum,
+        amount: amount,
+        reason: reason,
+        original: original,
+      ),
+      apply: () async {
+        remove();
+        await StorageService.saveSupplier(s);
+        if (mounted) setState(() {});
+      },
+    );
+  }
+
 
   @override
   void initState() {
@@ -290,11 +323,8 @@ class _SupplierDetailsScreenState extends State<SupplierDetailsScreen> {
                         await StorageService.saveSupplier(s);
                         setState(() {});
                       },
-                      onDelete: () async {
-                        s.deliveries.removeAt(i);
-                        await StorageService.saveSupplier(s);
-                        setState(() {});
-                      },
+                      onDelete: () => _voidSupplierRecord('delivery', 'توريد ${s.deliveries[i].item}', null,
+                          s.deliveries[i].id, s.deliveries[i].toJson(), () => s.deliveries.removeAt(i)),
                       isLast: i == s.deliveries.length - 1,
                     ),
                 ],
@@ -332,11 +362,8 @@ class _SupplierDetailsScreenState extends State<SupplierDetailsScreen> {
                   for (var i = 0; i < s.payments.length; i++)
                     _PaymentRow(
                       payment: s.payments[i],
-                      onDelete: () async {
-                        s.payments.removeAt(i);
-                        await StorageService.saveSupplier(s);
-                        setState(() {});
-                      },
+                      onDelete: () => _voidSupplierRecord('payment', 'دفعة للمورد', s.payments[i].amount,
+                          s.payments[i].id, s.payments[i].toJson(), () => s.payments.removeAt(i)),
                       isLast: i == s.payments.length - 1,
                     ),
                 ],
@@ -730,24 +757,7 @@ class _DeliveryRow extends StatelessWidget {
             icon: const Icon(Icons.delete_outline, size: 18),
             color: AppColors.danger,
             onPressed: () async {
-              final confirm = await showDialog<bool>(
-                context: context,
-                builder: (_) => AlertDialog(
-                  title: const Text('حذف التوريد؟'),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(context, false),
-                      child: const Text('إلغاء'),
-                    ),
-                    TextButton(
-                      onPressed: () => Navigator.pop(context, true),
-                      child: const Text('حذف',
-                          style: TextStyle(color: AppColors.danger)),
-                    ),
-                  ],
-                ),
-              );
-              if (confirm == true) onDelete();
+              onDelete();
             },
             visualDensity: VisualDensity.compact,
           ),
@@ -807,24 +817,7 @@ class _PaymentRow extends StatelessWidget {
             icon: const Icon(Icons.delete_outline, size: 18),
             color: AppColors.danger,
             onPressed: () async {
-              final confirm = await showDialog<bool>(
-                context: context,
-                builder: (_) => AlertDialog(
-                  title: const Text('حذف الدفعة؟'),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(context, false),
-                      child: const Text('إلغاء'),
-                    ),
-                    TextButton(
-                      onPressed: () => Navigator.pop(context, true),
-                      child: const Text('حذف',
-                          style: TextStyle(color: AppColors.danger)),
-                    ),
-                  ],
-                ),
-              );
-              if (confirm == true) onDelete();
+              onDelete();
             },
             visualDensity: VisualDensity.compact,
           ),

@@ -9,6 +9,9 @@ import '../models/reminder.dart';
 import 'app_state.dart';
 import 'app_error_service.dart';
 import '../models/customer.dart';
+import '../models/audit_entry.dart';
+import '../models/shift.dart';
+import '../models/shortage.dart';
 
 /// تطبيع النص العربي: إزالة التشكيل، توحيد الألفات، تاء مربوطة، ياء.
 /// يُستخدم لمطابقة الأسماء في assistant_controller.dart بدل المقارنة الخام
@@ -305,6 +308,45 @@ class StorageService {
 
   static List<Reminder> remindersForEntity(String entityId) =>
       reminders().where((r) => r.relatedEntityId == entityId).toList();
+
+  // ---------------- سجل التصحيحات / الشيفتات / الإقفالات / النواقص ----------------
+
+  /// للنسخ الاحتياطي فقط (قراءة/كتابة المفاتيح الخام).
+  static SharedPreferences get prefs => _p;
+
+  static Future<void> _saveEntity<T>(String key, List<T> current, T item,
+      String Function(T) id, Map<String, dynamic> Function(T) json) async {
+    final x = List<T>.from(current)
+      ..removeWhere((a) => id(a) == id(item))
+      ..add(item);
+    await _write(key, x.map((a) => jsonEncode(json(a))).toList());
+    AppState.instance.notify();
+  }
+
+  static List<AuditEntry> auditLog() => _read('audit_log', AuditEntry.fromJson);
+
+  static Future<void> addAudit(AuditEntry a) => _serialize(
+      () => _saveEntity<AuditEntry>('audit_log', auditLog(), a, (x) => x.id, (x) => x.toJson()));
+
+  /// تراجع عن تسجيل تصحيح لما تنفيذ الحركة نفسها يفشل (عشان مفيش تصحيح وهمي).
+  static Future<void> removeAudit(String id) => _serialize(() async {
+        final x = auditLog()..removeWhere((a) => a.id == id);
+        await _write('audit_log', x.map((a) => jsonEncode(a.toJson())).toList());
+        AppState.instance.notify();
+      });
+
+  static List<Shift> shifts() => _read('shifts', Shift.fromJson);
+  static Future<void> saveShift(Shift s) => _serialize(
+      () => _saveEntity<Shift>('shifts', shifts(), s, (x) => x.id, (x) => x.toJson()));
+
+  static List<DailyClosing> dailyClosings() =>
+      _read('daily_closings', DailyClosing.fromJson);
+  static Future<void> saveDailyClosing(DailyClosing d) => _serialize(() =>
+      _saveEntity<DailyClosing>('daily_closings', dailyClosings(), d, (x) => x.id, (x) => x.toJson()));
+
+  static List<ShortageItem> shortages() => _read('shortages', ShortageItem.fromJson);
+  static Future<void> saveShortage(ShortageItem s) => _serialize(() =>
+      _saveEntity<ShortageItem>('shortages', shortages(), s, (x) => x.id, (x) => x.toJson()));
 
   // ---------------- Settings ----------------
   /// مفتاح الخدمة الإضافية الاختيارية. فاضي افتراضيًا، وله حقل في شاشة

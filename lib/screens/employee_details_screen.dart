@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
+import '../models/audit_entry.dart';
+import 'void_dialog.dart';
 import 'package:uuid/uuid.dart';
 import '../models/employee.dart';
 import '../services/storage_service.dart';
@@ -882,15 +884,49 @@ class _S extends State<EmployeeDetailsScreen> {
           icon: const Icon(Icons.delete_outline, size: 18),
           color: AppColors.danger,
           visualDensity: VisualDensity.compact,
-          onPressed: () async {
-            final ok = await _confirm('حذف سجل الحضور؟', 'لا يمكن التراجع.');
-            if (ok != true) return;
-            e.attendance.remove(r.day);
-            e.attendanceLog.removeWhere((a) => a.day == r.day);
-            await _save(msg: 'تم حذف سجل ${r.day}');
-          },
+          onPressed: () => _voidRecord(
+            'attendance',
+            'سجل حضور',
+            null,
+            r.day,
+            {'day': r.day, 'log': e.attendanceLog.where((a) => a.day == r.day).map((a) => a.toJson()).toList()},
+            r.day,
+            () {
+              e.attendance.remove(r.day);
+              e.attendanceLog.removeWhere((a) => a.day == r.day);
+            },
+          ),
         ),
       ]),
+    );
+  }
+
+  /// إلغاء حركة مالية بسبب مسجّل (مش حذف صامت) — الأصل بيتحفظ في سجل التصحيحات.
+  Future<void> _voidRecord(String type, String label, double? amount, String recordId,
+      Map<String, dynamic> original, String when, VoidCallback remove) async {
+    final sum = '$label${amount == null ? '' : ' ${money(amount)}'} — $when';
+    await voidWithAudit(
+      context,
+      title: 'إلغاء $label',
+      summary: sum,
+      entry: (id, reason, at) => AuditEntry(
+        id: id,
+        at: at,
+        action: 'void',
+        ownerType: 'employee',
+        ownerId: e.id,
+        ownerName: e.name,
+        recordType: type,
+        recordId: recordId,
+        summary: sum,
+        amount: amount,
+        reason: reason,
+        original: original,
+      ),
+      apply: () async {
+        remove();
+        await _save(msg: 'تم إلغاء $label — اتسجّل في سجل التصحيحات');
+      },
     );
   }
 
@@ -906,10 +942,8 @@ class _S extends State<EmployeeDetailsScreen> {
               sub: '${arabicDateTime(e.advances[i].date)}${e.advances[i].note.isEmpty ? '' : ' · ${e.advances[i].note}'}',
               amount: e.advances[i].amount,
               color: AppColors.warning,
-              onDelete: () async {
-                e.advances.removeAt(i);
-                await _save(msg: 'تم حذف السلفة');
-              },
+              onDelete: () => _voidRecord('advance', 'سلفة', e.advances[i].amount, e.advances[i].id,
+                  e.advances[i].toJson(), arabicDateTime(e.advances[i].date), () => e.advances.removeAt(i)),
             ),
         ]
       ),
@@ -922,10 +956,8 @@ class _S extends State<EmployeeDetailsScreen> {
               sub: '${arabicDateTime(e.payments[i].date)}${e.payments[i].note.isEmpty ? '' : ' · ${e.payments[i].note}'}',
               amount: e.payments[i].amount,
               color: AppColors.success,
-              onDelete: () async {
-                e.payments.removeAt(i);
-                await _save(msg: 'تم حذف الدفعة');
-              },
+              onDelete: () => _voidRecord('payment', 'دفعة راتب', e.payments[i].amount, e.payments[i].id,
+                  e.payments[i].toJson(), arabicDateTime(e.payments[i].date), () => e.payments.removeAt(i)),
             ),
         ]
       ),
@@ -938,10 +970,8 @@ class _S extends State<EmployeeDetailsScreen> {
               sub: arabicDateTime(e.deductions[i].date),
               amount: e.deductions[i].amount,
               color: AppColors.danger,
-              onDelete: () async {
-                e.deductions.removeAt(i);
-                await _save(msg: 'تم حذف الخصم');
-              },
+              onDelete: () => _voidRecord('deduction', 'خصم', e.deductions[i].amount, e.deductions[i].id,
+                  e.deductions[i].toJson(), arabicDateTime(e.deductions[i].date), () => e.deductions.removeAt(i)),
             ),
         ]
       ),
@@ -954,10 +984,8 @@ class _S extends State<EmployeeDetailsScreen> {
               sub: arabicDateTime(e.bonuses[i].date),
               amount: e.bonuses[i].amount,
               color: AppColors.accent,
-              onDelete: () async {
-                e.bonuses.removeAt(i);
-                await _save(msg: 'تم حذف المكافأة');
-              },
+              onDelete: () => _voidRecord('bonus', 'مكافأة', e.bonuses[i].amount, e.bonuses[i].id,
+                  e.bonuses[i].toJson(), arabicDateTime(e.bonuses[i].date), () => e.bonuses.removeAt(i)),
             ),
         ]
       ),
@@ -971,6 +999,9 @@ class _S extends State<EmployeeDetailsScreen> {
               amount: 0.0,
               color: AppColors.info,
               onDelete: () async {
+                // الملاحظة مش حركة مالية: حذف عادي بعد تأكيد.
+                final ok = await _confirm('حذف الملاحظة؟', 'لا يمكن التراجع.');
+                if (ok != true) return;
                 e.notes.removeAt(i);
                 await _save(msg: 'تم حذف الملاحظة');
               },
@@ -1020,10 +1051,8 @@ class _S extends State<EmployeeDetailsScreen> {
                       icon: const Icon(Icons.delete_outline, size: 18),
                       color: AppColors.danger,
                       visualDensity: VisualDensity.compact,
-                      onPressed: () async {
-                        final ok = await _confirm('حذف السجل؟', 'لا يمكن التراجع.');
-                        if (ok == true) r.onDelete();
-                      },
+                      tooltip: 'إلغاء الحركة (بسبب)',
+                      onPressed: () => r.onDelete(),
                     ),
                   ]),
                 ),

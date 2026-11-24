@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:speech_to_text/speech_to_text.dart';
+import 'cafe_logo_image.dart';
 import 'package:uuid/uuid.dart';
 import '../services/assistant_controller.dart';
 import '../services/chat_history_service.dart';
@@ -304,14 +305,15 @@ class _S extends State<ChatScreen> {
                 color: AppColors.primaryTint,
                 borderRadius: BorderRadius.circular(AppRadius.sm),
               ),
-              child: const Icon(
-                Icons.smart_toy_outlined,
+              clipBehavior: Clip.antiAlias,
+              child: const CafeLogoImage(
+                fallback: Icons.smart_toy_outlined,
                 size: 18,
                 color: AppColors.primary,
               ),
             ),
             const SizedBox(width: AppSpace.x2),
-            const Text('مساعد الإدارة'),
+            const Flexible(child: CafeNameText()),
           ],
         ),
         actions: [

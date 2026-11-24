@@ -4,10 +4,12 @@ import '../design/app_theme.dart';
 import '../design/format.dart';
 import '../design/tokens.dart';
 import '../design/widgets.dart';
+import '../models/audit_entry.dart';
 import '../models/customer.dart';
 import '../services/app_state.dart';
 import '../services/storage_service.dart';
 import 'receivables_screen.dart' show parseMoney;
+import 'void_dialog.dart';
 
 /// حساب العميل: الرصيد + بيع آجل + دفعة + السجل. (عكس شاشة تفاصيل الموظف:
 /// مفيش حضور ولا سلف.)
@@ -42,9 +44,9 @@ class CustomerDetailsScreen extends StatelessWidget {
             ? AppColors.danger
             : (b < -0.005 ? AppColors.primary : AppColors.success);
         final rows = <_Row>[
-          for (final s in c.sales) _Row(s.date, true, s.total, _saleText(s)),
+          for (final s in c.sales) _Row(s.date, true, s.total, _saleText(s), s.id, s.toJson()),
           for (final p in c.payments)
-            _Row(p.date, false, p.amount, p.note.isEmpty ? 'دفعة' : p.note),
+            _Row(p.date, false, p.amount, p.note.isEmpty ? 'دفعة' : p.note, p.id, p.toJson()),
         ]..sort((a, b) => b.date.compareTo(a.date));
 
         return Scaffold(
@@ -121,17 +123,67 @@ class CustomerDetailsScreen extends StatelessWidget {
                     ),
                     title: Text(r.text),
                     subtitle: Text(arabicDate(r.date)),
-                    trailing: Text(
-                      '${r.isSale ? '+' : '−'} ${money(r.amount)}',
-                      style: TextStyle(
-                          color: r.isSale ? AppColors.danger : AppColors.success,
-                          fontWeight: FontWeight.w700),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          '${r.isSale ? '+' : '−'} ${money(r.amount)}',
+                          style: TextStyle(
+                              color: r.isSale ? AppColors.danger : AppColors.success,
+                              fontWeight: FontWeight.w700),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline, size: 18),
+                          color: AppColors.danger,
+                          tooltip: 'إلغاء الحركة (بسبب)',
+                          visualDensity: VisualDensity.compact,
+                          onPressed: () => _voidEntry(context, c, r),
+                        ),
+                      ],
                     ),
                   ),
                 ),
             ],
           ),
         );
+      },
+    );
+  }
+
+  /// إلغاء بيع/دفعة بسبب مسجّل: الأصل بيتحفظ في سجل التصحيحات والرصيد بيتحسب من
+  /// الحركات الفعالة. تصحيح الغلطة = إلغاء الحركة وتسجيل الصح.
+  Future<void> _voidEntry(BuildContext context, Customer c, _Row r) async {
+    final label = r.isSale ? (r.text.isEmpty ? 'مبيعات آجلة' : r.text) : 'دفعة';
+    final sum = '$label ${money(r.amount)} — ${arabicDate(r.date)}';
+    await voidWithAudit(
+      context,
+      title: r.isSale ? 'إلغاء بيع آجل' : 'إلغاء دفعة',
+      summary: sum,
+      entry: (id, reason, at) => AuditEntry(
+        id: id,
+        at: at,
+        action: 'void',
+        ownerType: 'customer',
+        ownerId: c.id,
+        ownerName: c.name,
+        recordType: r.isSale ? 'sale' : 'payment',
+        recordId: r.id,
+        summary: sum,
+        amount: r.amount,
+        reason: reason,
+        original: r.original,
+      ),
+      apply: () async {
+        final ok = await StorageService.mutateCustomer(c.id, (x) {
+          final before = x.sales.length + x.payments.length;
+          if (r.isSale) {
+            x.sales.removeWhere((e) => e.id == r.id);
+          } else {
+            x.payments.removeWhere((e) => e.id == r.id);
+          }
+          return x.sales.length + x.payments.length != before;
+        });
+        if (!ok) throw StateError('الحركة مش موجودة');
       },
     );
   }
@@ -176,7 +228,9 @@ class _Row {
   final bool isSale;
   final double amount;
   final String text;
-  _Row(this.date, this.isSale, this.amount, this.text);
+  final String id;
+  final Map<String, dynamic> original;
+  _Row(this.date, this.isSale, this.amount, this.text, this.id, this.original);
 }
 
 Customer? _customer(String id) {

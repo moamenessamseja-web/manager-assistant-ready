@@ -1,4 +1,9 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
+import '../services/cafe_profile_service.dart';
+import 'cafe_logo_image.dart';
 import '../services/app_state.dart';
 import '../services/settings_service.dart';
 import '../design/tokens.dart';
@@ -17,6 +22,52 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _S extends State<SettingsScreen> {
+  final _cafeName = TextEditingController(text: CafeProfileService.name);
+
+  @override
+  void dispose() {
+    _cafeName.dispose();
+    super.dispose();
+  }
+
+  void _snack(String m) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
+
+  Future<void> _saveCafeName() async {
+    try {
+      await CafeProfileService.setName(_cafeName.text);
+      if (mounted) {
+        FocusScope.of(context).unfocus();
+        _snack(CafeProfileService.hasCustomName ? 'تم حفظ اسم الكافيه' : 'رجعنا للعنوان العام');
+      }
+    } catch (_) {
+      if (mounted) _snack('تعذّر حفظ الاسم');
+    }
+  }
+
+  Future<void> _pickLogo() async {
+    try {
+      final picked = await ImagePicker().pickImage(source: ImageSource.gallery, maxWidth: 800);
+      if (picked == null) return;
+      // نسخة داخل مجلد التطبيق (نفس طريقة صور الموظفين) عشان ما تضيعش مع الكاش.
+      final dir = await getApplicationDocumentsDirectory();
+      final logoDir = Directory('${dir.path}/cafe_logo');
+      if (!logoDir.existsSync()) logoDir.createSync(recursive: true);
+      final dest = '${logoDir.path}/logo_${DateTime.now().millisecondsSinceEpoch}.jpg';
+      await File(picked.path).copy(dest);
+      await CafeProfileService.setLogoPath(dest);
+      if (mounted) {
+        setState(() {});
+        _snack('تم تحديث الشعار');
+      }
+    } catch (_) {
+      if (mounted) _snack('تعذّر اختيار الصورة');
+    }
+  }
+
+  Future<void> _removeLogo() async {
+    await CafeProfileService.clearLogo();
+    if (mounted) setState(() {});
+  }
   Future<void> _setTheme(ThemeMode m) async {
     await SettingsService.setThemeMode(m);
     AppState.instance.notify(); // يُعيد بناء MaterialApp بالثيم الجديد
@@ -36,6 +87,57 @@ class _S extends State<SettingsScreen> {
       appBar: AppBar(title: Text(L.t('settings'))),
       body: ListView(
         children: [
+          // ── هوية الكافيه ──
+          AppSectionHeader(title: 'هوية الكافيه'),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpace.x4),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(children: [
+                  Container(
+                    width: 64,
+                    height: 64,
+                    clipBehavior: Clip.antiAlias,
+                    decoration: BoxDecoration(
+                      color: AppColors.primaryTint,
+                      borderRadius: BorderRadius.circular(AppRadius.md),
+                    ),
+                    child: const CafeLogoImage(
+                        fallback: Icons.storefront_outlined, color: AppColors.primary, size: 30),
+                  ),
+                  const SizedBox(width: AppSpace.x3),
+                  Expanded(
+                    child: Wrap(spacing: AppSpace.x2, children: [
+                      OutlinedButton.icon(
+                        onPressed: _pickLogo,
+                        icon: const Icon(Icons.image_outlined),
+                        label: Text(CafeProfileService.logoFile != null ? 'استبدال الشعار' : 'اختيار شعار'),
+                      ),
+                      if (CafeProfileService.logoPath.isNotEmpty)
+                        TextButton(onPressed: _removeLogo, child: const Text('إزالة')),
+                    ]),
+                  ),
+                ]),
+                const SizedBox(height: AppSpace.x3),
+                TextField(
+                  controller: _cafeName,
+                  maxLength: 40,
+                  textInputAction: TextInputAction.done,
+                  onSubmitted: (_) => _saveCafeName(),
+                  decoration: const InputDecoration(
+                    labelText: 'اسم الكافيه',
+                    helperText: 'بيظهر في القائمة والمحادثة بدل «مساعد الإدارة». سيبه فاضي للعنوان العام.',
+                  ),
+                ),
+                Align(
+                  alignment: AlignmentDirectional.centerEnd,
+                  child: FilledButton(onPressed: _saveCafeName, child: const Text('حفظ الاسم')),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: AppSpace.x2),
           // ── المظهر ──
           AppSectionHeader(title: L.t('appearance')),
           Padding(
