@@ -152,6 +152,8 @@ void main() {
       await tester.tap(find.text('عرض الإقفال اليومي'));
       await pumpTransitions(tester);
       expect(find.text('الشيفتات (1)'), findsOneWidget);
+      await tester.tap(find.text('صباحي'));
+      await pumpTransitions(tester);
       expect(find.text('مبيعات كاش'), findsOneWidget); // تفصيل الوردية داخل تقرير اليوم
       expect(tester.takeException(), isNull);
     });
