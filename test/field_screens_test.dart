@@ -71,14 +71,14 @@ void main() {
           ShortageItem(id: 'n1', item: 'سكر', quantity: 10, unit: 'كيلو', createdAt: DateTime(2026, 11, 22))));
       await pumpRtl(tester, const ShortagesScreen());
       expect(find.text('سكر — 10 كيلو'), findsOneWidget);
-      // Exercise persisted transitions independently of popup-route hit testing.
+      // Verify persisted status transitions and the screen's outstanding/history filters.
       await tester.runAsync(() async {
         final x = StorageService.shortages().single;
         x.setStatus(ShortageItem.purchased, DateTime(2026, 11, 23));
         await StorageService.saveShortage(x);
       });
       await pumpTransitions(tester);
-      expect(find.text('سكر — 10 كيلو'), findsNothing); // خرج من «مطلوب»
+      expect(find.text('سكر — 10 كيلو'), findsNothing);
       expect(StorageService.shortages().single.isDone, isTrue);
       await tester.tap(find.textContaining('تم / ملغي'));
       await pumpTransitions(tester);
@@ -88,19 +88,6 @@ void main() {
         x.setStatus(ShortageItem.pending, DateTime(2026, 11, 23, 1));
         await StorageService.saveShortage(x);
       });
-      await pumpTransitions(tester);
-      expect(StorageService.shortages().single.isOutstanding, isTrue);
-      expect(StorageService.shortages().single.history.length, 3);
-    });
-      await pumpTransitions(tester);
-      expect(find.text('سكر — 10 كيلو'), findsNothing); // خرج من «مطلوب»
-      expect(StorageService.shortages().single.isDone, isTrue);
-      await tester.tap(find.textContaining('تم / ملغي'));
-      await pumpTransitions(tester);
-      expect(find.text('سكر — 10 كيلو'), findsOneWidget);
-      await tester.tap(find.byIcon(Icons.more_vert));
-      await pumpTransitions(tester);
-      await tester.tap(find.text('إعادة فتح (مطلوب)'));
       await pumpTransitions(tester);
       expect(StorageService.shortages().single.isOutstanding, isTrue);
       expect(StorageService.shortages().single.history.length, 3);
