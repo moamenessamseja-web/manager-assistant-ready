@@ -25,8 +25,14 @@ class FormSheet extends StatelessWidget {
     return Padding(
       padding: EdgeInsets.fromLTRB(
           AppSpace.x4, AppSpace.x4, AppSpace.x4, MediaQuery.of(context).viewInsets.bottom + AppSpace.x4),
-      child: SingleChildScrollView(
-        child: Column(
+      child: ConstrainedBox(
+        // Keep long forms inside the visible viewport; their contents scroll
+        // instead of placing the save action below the physical screen.
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.85,
+        ),
+        child: SingleChildScrollView(
+          child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -45,6 +51,7 @@ class FormSheet extends StatelessWidget {
                   : Text(saveLabel),
             ),
           ],
+          ),
         ),
       ),
     );
