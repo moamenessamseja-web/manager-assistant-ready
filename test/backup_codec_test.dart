@@ -1,14 +1,7 @@
 import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:manager_assistant/models/audit_entry.dart';
-import 'package:manager_assistant/models/commitment.dart';
-import 'package:manager_assistant/models/customer.dart';
 import 'package:manager_assistant/models/employee.dart';
-import 'package:manager_assistant/models/reminder.dart';
-import 'package:manager_assistant/models/rule.dart';
 import 'package:manager_assistant/models/shift.dart';
-import 'package:manager_assistant/models/shortage.dart';
-import 'package:manager_assistant/models/supplier.dart';
 import 'package:manager_assistant/services/backup_codec.dart';
 import 'package:manager_assistant/services/closing_service.dart';
 import 'package:manager_assistant/services/sha256.dart';

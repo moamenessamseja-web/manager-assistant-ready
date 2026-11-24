@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:manager_assistant/models/customer.dart';
 import 'package:manager_assistant/models/employee.dart';
-import 'package:manager_assistant/models/supplier.dart';
 import 'package:manager_assistant/services/backup_codec.dart';
 import 'package:manager_assistant/services/backup_service.dart';
 import 'package:manager_assistant/services/storage_service.dart';
