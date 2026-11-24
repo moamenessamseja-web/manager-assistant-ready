@@ -154,9 +154,10 @@ void main() {
       expect(StorageService.shifts().single.isClosed, isTrue); // الشيفت الأصلي لسه موجود
       await tapVisible(tester, find.text('عرض الإقفال اليومي'));
       expect(find.text('الشيفتات (1)'), findsOneWidget);
+      expect(find.text('مبيعات كاش'), findsOneWidget); // إجمالي اليوم فقط قبل توسيع الوردية
       await tester.tap(find.text('صباحي').last);
       await pumpTransitions(tester);
-      expect(find.text('مبيعات كاش'), findsOneWidget); // تفصيل الوردية داخل تقرير اليوم
+      expect(find.text('مبيعات كاش'), findsNWidgets(2)); // تفصيل الوردية + إجمالي اليوم
       expect(tester.takeException(), isNull);
     });
 
