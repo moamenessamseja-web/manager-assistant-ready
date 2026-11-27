@@ -37,26 +37,30 @@ Future<void> pumpTransitions(WidgetTester tester) async {
 }
 
 Future<void> tapVisible(WidgetTester tester, Finder finder) async {
-  // Target the interactive control, not only its Text child. This matters
-  // for bottom sheets where the label can be laid out below the test viewport.
-  final buttons = find.ancestor(of: finder, matching: find.byType(FilledButton));
-  final target = buttons.evaluate().isNotEmpty ? buttons.first : finder;
-  final scrollable =
-      find.ancestor(of: target, matching: find.byType(Scrollable)).first;
-
+  // Tap the owning control. FormSheet keeps its primary action pinned while
+  // the fields scroll, so a focused text field cannot hide the save action.
+  final controls = find.ancestor(
+    of: finder,
+    matching: find.byWidgetPredicate(
+      (widget) => widget is ButtonStyleButton || widget is ActionChip,
+    ),
+  );
+  final target = controls.evaluate().isNotEmpty ? controls.first : finder;
+  final scrollables =
+      find.ancestor(of: target, matching: find.byType(Scrollable));
   await tester.ensureVisible(target);
   await tester.pump();
-  final viewport = Rect.fromLTWH(
-    0,
-    0,
-    tester.view.physicalSize.width / tester.view.devicePixelRatio,
-    tester.view.physicalSize.height / tester.view.devicePixelRatio,
-  );
-  if (!tester.getRect(target).overlaps(viewport)) {
-    await tester.dragUntilVisible(target, scrollable, const Offset(0, -240));
+  if (target.hitTestable().evaluate().isEmpty && scrollables.evaluate().isNotEmpty) {
+    await tester.dragUntilVisible(
+      target,
+      scrollables.first,
+      const Offset(0, -240),
+    );
     await tester.pump();
   }
-  await tester.tap(target, warnIfMissed: false);
+  expect(target.hitTestable(), findsOneWidget,
+      reason: 'Control must be visible before tapping: $finder');
+  await tester.tap(target);
   await pumpTransitions(tester);
 }
 
