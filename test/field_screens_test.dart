@@ -37,18 +37,26 @@ Future<void> pumpTransitions(WidgetTester tester) async {
 }
 
 Future<void> tapVisible(WidgetTester tester, Finder finder) async {
-  // First ask the nearest scrollable to reveal the control. If it is still
-  // outside the hit-testable viewport (e.g. a keyboard-resized modal sheet),
-  // continue scrolling that same scrollable until the control is actionable.
+  // Target the interactive control, not only its Text child. This matters
+  // for bottom sheets where the label can be laid out below the test viewport.
+  final buttons = find.ancestor(of: finder, matching: find.byType(FilledButton));
+  final target = buttons.evaluate().isNotEmpty ? buttons.first : finder;
   final scrollable =
-      find.ancestor(of: finder, matching: find.byType(Scrollable)).first;
-  await tester.ensureVisible(finder);
+      find.ancestor(of: target, matching: find.byType(Scrollable)).first;
+
+  await tester.ensureVisible(target);
   await tester.pump();
-  if (finder.hitTestable().evaluate().isEmpty) {
-    await tester.dragUntilVisible(finder, scrollable, const Offset(0, -240));
+  final viewport = Rect.fromLTWH(
+    0,
+    0,
+    tester.view.physicalSize.width / tester.view.devicePixelRatio,
+    tester.view.physicalSize.height / tester.view.devicePixelRatio,
+  );
+  if (!tester.getRect(target).overlaps(viewport)) {
+    await tester.dragUntilVisible(target, scrollable, const Offset(0, -240));
     await tester.pump();
   }
-  await tester.tap(finder);
+  await tester.tap(target, warnIfMissed: false);
   await pumpTransitions(tester);
 }
 
@@ -138,7 +146,7 @@ void main() {
       await tapVisible(tester, find.text('ابدأ شيفت'));
       await pumpTransitions(tester);
       await tester.enterText(find.byType(TextField).at(1), '100');
-      await tapVisible(tester, find.text('ابدأ'));
+      await tapVisible(tester, find.widgetWithText(FilledButton, 'ابدأ'));
       expect(find.text('شيفت مفتوح: صباحي'), findsOneWidget);
       expect(StorageService.shifts().single.openingCash, 100);
 
@@ -173,7 +181,7 @@ void main() {
 
     testWidgets('ماينفعش فتح شيفتين: الزرار بيختفي والشيفت المفتوح بيظهر', (tester) async {
       await pumpRtl(tester, const ShiftsScreen());
-      await tester.tap(find.text('ابدأ شيفت'));
+      await tapVisible(tester, find.text('ابدأ شيفت'));
       await pumpTransitions(tester);
       await tapVisible(tester, find.text('ابدأ'));
       expect(find.text('ابدأ شيفت'), findsNothing);
